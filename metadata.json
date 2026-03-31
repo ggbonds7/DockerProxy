@@ -1,0 +1,5 @@
+{
+  "name": "DockerProxy - 通用Docker代理平台",
+  "description": "集成Docker管理、DNS配置、Nginx反向代理及自动化证书申请的一站式运维平台。",
+  "requestFramePermissions": []
+}
