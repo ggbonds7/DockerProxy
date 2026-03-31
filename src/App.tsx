@@ -5,6 +5,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
 import { ContainerInfo, ProxyRoute, DNSRecord, AppConfig, Certificate } from './types';
+import { Monitor } from './components/Monitor';
 
 // 统一的 fetch 封装，自动携带 token
 export const apiFetch = async (url: string, options: RequestInit = {}) => {
@@ -1188,7 +1189,7 @@ function useTheme() {
 // --- 主应用组件 ---
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('docker');
+  const [activeTab, setActiveTab] = useState('monitor');
   const [config, setConfig] = useState<AppConfig | null>(null);
   const { theme, setTheme } = useTheme();
   const [loggedIn, setLoggedIn] = useState(false);
@@ -1321,6 +1322,12 @@ export default function App() {
 
           <nav className="space-y-2">
             <SidebarItem 
+              icon={Activity} 
+              label="主机监控" 
+              active={activeTab === 'monitor'} 
+              onClick={() => setActiveTab('monitor')} 
+            />
+            <SidebarItem 
               icon={LayoutDashboard} 
               label="容器管理" 
               active={activeTab === 'docker'} 
@@ -1395,6 +1402,7 @@ export default function App() {
               exit={{ opacity: 0, x: -10 }}
               transition={{ duration: 0.2 }}
             >
+              {activeTab === 'monitor' && <Monitor apiFetch={apiFetch} />}
               {activeTab === 'docker' && <DockerView />}
               {activeTab === 'dns' && <DNSView config={config} />}
               {activeTab === 'compose' && <ComposeView />}

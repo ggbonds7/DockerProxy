@@ -17,6 +17,7 @@ import proxyRoutes from "./server/routes/proxy";
 import certsRoutes from "./server/routes/certs";
 import migrateRoutes from "./server/routes/migrate";
 import deployRoutes from "./server/routes/deploy";
+import monitorRoutes from "./server/routes/monitor";
 
 async function startServer() {
   const app = express();
@@ -45,6 +46,7 @@ async function startServer() {
   app.use("/api/certs", certsRoutes);
   app.use("/api/migrate", migrateRoutes);
   app.use("/api/deploy", deployRoutes);
+  app.use("/api/monitor", monitorRoutes);
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {

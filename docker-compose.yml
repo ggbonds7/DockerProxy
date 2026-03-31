@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  docker-proxy-platform:
+    build: .
+    container_name: docker-proxy-platform
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      # 挂载宿主机的 docker.sock 以便平台管理宿主机容器
+      - /var/run/docker.sock:/var/run/docker.sock
+      # 挂载数据目录，持久化保存部署的 docker-compose 项目
+      - ./data:/app/data
+      # 挂载环境变量文件
+      - ./.env:/app/.env
+    environment:
+      - NODE_ENV=production
+    networks:
+      - proxy_net
+
+networks:
+  proxy_net:
+    external: true

@@ -4,6 +4,7 @@
 
 ## ✨ 核心特性
 
+- 📊 **主机监控**: 实时监控宿主机的 CPU、内存、磁盘、网络流量与延迟等关键指标，并提供历史负载趋势图。
 - 🐳 **容器管理**: 实时监控容器状态，支持启动、停止、重启、删除操作，并可在线实时查看容器日志。
 - 🌐 **DNS 解析管理**: 深度集成 Cloudflare API，支持多域名的 DNS 记录可视化增删改查。
 - 🚀 **服务快速部署**: 输入镜像名即可自动生成符合最佳实践的 `docker-compose.yml`，自动接入 `proxy_net` 内部网络并一键拉起服务。
@@ -31,25 +32,49 @@
 
 ## 📦 安装与部署
 
-### 1. 克隆项目
+本项目支持使用 Docker Compose 一键部署（推荐），或通过源码手动运行。
+
+### 方式一：Docker Compose 部署（推荐）
+
+1. **克隆项目**
 ```bash
 git clone https://github.com/yourusername/docker-proxy-platform.git
 cd docker-proxy-platform
 ```
 
-### 2. 安装依赖
+2. **配置环境变量**
+```bash
+cp .env.example .env
+# 根据需要修改 .env 文件中的配置
+```
+
+3. **一键启动**
+```bash
+docker compose up -d
+```
+服务将自动构建并运行在 `http://localhost:3000`。
+
+### 方式二：源码手动部署
+
+1. **克隆项目**
+```bash
+git clone https://github.com/yourusername/docker-proxy-platform.git
+cd docker-proxy-platform
+```
+
+2. **安装依赖**
 ```bash
 npm install
 ```
 
-### 3. 环境配置
+3. **环境配置**
 复制环境变量示例文件并进行修改：
 ```bash
 cp .env.example .env
 ```
 *提示：你也可以在启动后，直接通过 Web 界面的“系统设置”在线修改这些配置。*
 
-### 4. 启动服务
+4. **启动服务**
 
 **开发模式:**
 ```bash
