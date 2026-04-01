@@ -8,8 +8,8 @@ WORKDIR /app
 # 复制 package.json 和 package-lock.json
 COPY package*.json ./
 
-# 安装依赖
-RUN npm install
+# 安装依赖前删除可能由于跨平台产生的 lock 文件，避免 native binding 报错
+RUN rm -rf package-lock.json node_modules && npm install
 
 # 复制所有源代码
 COPY . .
