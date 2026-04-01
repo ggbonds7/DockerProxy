@@ -1,9 +1,10 @@
 export interface ContainerInfo {
-  Id: string;
-  Names: string[];
-  Image: string;
-  State: string;
-  Status: string;
+  id: string;
+  name: string;
+  image: string;
+  state: string;
+  status: string;
+  ports: string[];
 }
 
 export interface ProxyRoute {

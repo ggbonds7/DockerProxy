@@ -145,33 +145,33 @@ const DockerView = () => {
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
               {containers.map((c) => (
-                <tr key={c.Id} className="group hover:bg-slate-50 dark:hover:bg-slate-800/30">
-                  <td className="py-4 font-medium text-slate-900 dark:text-white">{c.Names?.[0]?.replace('/', '') || 'Unknown'}</td>
-                  <td className="py-4 text-slate-500 dark:text-slate-400 text-sm">{c.Image}</td>
+                <tr key={c.id} className="group hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                  <td className="py-4 font-medium text-slate-900 dark:text-white">{c.name || 'Unknown'}</td>
+                  <td className="py-4 text-slate-500 dark:text-slate-400 text-sm">{c.image}</td>
                   <td className="py-4">
-                    <Badge variant={c.State === 'running' ? 'success' : 'danger'}>
-                      {c.State}
+                    <Badge variant={c.state === 'running' ? 'success' : 'danger'}>
+                      {c.state}
                     </Badge>
                   </td>
-                  <td className="py-4 text-slate-500 dark:text-slate-400 text-sm">{c.Status}</td>
+                  <td className="py-4 text-slate-500 dark:text-slate-400 text-sm">{c.status}</td>
                   <td className="py-4">
                     <div className="flex items-center justify-end gap-2">
-                      <button onClick={() => viewLogs(c.Id)} className="p-2 text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors" title="查看日志">
+                      <button onClick={() => viewLogs(c.id)} className="p-2 text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors" title="查看日志">
                         <Terminal className="w-4 h-4" />
                       </button>
-                      {c.State === 'running' ? (
-                        <button onClick={() => handleAction(c.Id, 'stop')} className="p-2 text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 transition-colors" title="停止">
+                      {c.state === 'running' ? (
+                        <button onClick={() => handleAction(c.id, 'stop')} className="p-2 text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 transition-colors" title="停止">
                           <Square className="w-4 h-4" />
                         </button>
                       ) : (
-                        <button onClick={() => handleAction(c.Id, 'start')} className="p-2 text-slate-400 hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors" title="启动">
+                        <button onClick={() => handleAction(c.id, 'start')} className="p-2 text-slate-400 hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors" title="启动">
                           <Play className="w-4 h-4" />
                         </button>
                       )}
-                      <button onClick={() => handleAction(c.Id, 'restart')} className="p-2 text-slate-400 hover:text-amber-500 dark:hover:text-amber-400 transition-colors" title="重启">
+                      <button onClick={() => handleAction(c.id, 'restart')} className="p-2 text-slate-400 hover:text-amber-500 dark:hover:text-amber-400 transition-colors" title="重启">
                         <RotateCcw className="w-4 h-4" />
                       </button>
-                      <button onClick={() => handleAction(c.Id, 'remove')} className="p-2 text-slate-400 hover:text-rose-600 transition-colors" title="删除">
+                      <button onClick={() => handleAction(c.id, 'remove')} className="p-2 text-slate-400 hover:text-rose-600 transition-colors" title="删除">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
