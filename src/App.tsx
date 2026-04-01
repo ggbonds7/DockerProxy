@@ -146,7 +146,7 @@ const DockerView = () => {
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
               {containers.map((c) => (
                 <tr key={c.Id} className="group hover:bg-slate-50 dark:hover:bg-slate-800/30">
-                  <td className="py-4 font-medium text-slate-900 dark:text-white">{c.Names[0].replace('/', '')}</td>
+                  <td className="py-4 font-medium text-slate-900 dark:text-white">{c.Names?.[0]?.replace('/', '') || 'Unknown'}</td>
                   <td className="py-4 text-slate-500 dark:text-slate-400 text-sm">{c.Image}</td>
                   <td className="py-4">
                     <Badge variant={c.State === 'running' ? 'success' : 'danger'}>
