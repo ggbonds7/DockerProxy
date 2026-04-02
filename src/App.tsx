@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  LayoutDashboard, Globe, FileCode, Network, ShieldCheck, Settings, Play, Square, RotateCcw, Trash2, Terminal, Plus, Save, RefreshCw, ExternalLink, ChevronRight, Activity, AlertCircle, CheckCircle2, Edit3, Search, Sun, Moon, Truck, Eye
+  LayoutDashboard, Globe, FileCode, Network, ShieldCheck, Settings, Play, Square, RotateCcw, Trash2, Terminal, Plus, Save, RefreshCw, ExternalLink, ChevronRight, Activity, AlertCircle, CheckCircle2, Edit3, Search, Truck, Eye
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
 import { ContainerInfo, ProxyRoute, DNSRecord, AppConfig, Certificate } from './types';
 import { Monitor } from './components/Monitor';
+import { MigrationConsole } from './components/MigrationConsole';
+import { Badge, Button, Card, Checkbox, EmptyState, Field, IconButton, Input, Notice, PageHeader, PaginationControls, Select, StatCard, Textarea, ThemeSwitch } from './components/ui/primitives';
+import { useTheme } from './hooks/useTheme';
 
 // 统一的 fetch 封装，自动携带 token
 export const apiFetch = async (url: string, options: RequestInit = {}) => {
@@ -29,47 +32,16 @@ const SidebarItem = ({ icon: Icon, label, active, onClick }: { icon: any, label:
   <button
     onClick={onClick}
     className={cn(
-      "flex items-center w-full gap-3 px-4 py-3 text-sm font-medium transition-all duration-200 rounded-lg group",
+      "group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200",
       active 
-        ? "bg-blue-600 text-white shadow-lg shadow-blue-500/30" 
-        : "text-slate-600 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+        ? "bg-[var(--brand-600)] text-white shadow-[0_16px_28px_-22px_var(--brand-600)]"
+        : "text-[color:var(--text-secondary)] hover:bg-[var(--surface-soft)] hover:text-[color:var(--text-primary)]"
     )}
   >
-    <Icon className={cn("w-5 h-5", active ? "text-white" : "text-slate-500 group-hover:text-blue-500 dark:text-slate-400 dark:group-hover:text-blue-400")} />
+    <Icon className={cn("w-5 h-5", active ? "text-white" : "text-[color:var(--text-tertiary)] group-hover:text-[var(--brand-500)]")} />
     {label}
   </button>
 );
-
-// 卡片容器组件，用于包裹各个模块的内容
-const Card = ({ children, title, subtitle, action }: { children: React.ReactNode, title?: string, subtitle?: string, action?: React.ReactNode }) => (
-  <div className="overflow-hidden border bg-white dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 rounded-xl backdrop-blur-sm shadow-sm dark:shadow-none">
-    {(title || action) && (
-      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800">
-        <div>
-          {title && <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{title}</h3>}
-          {subtitle && <p className="text-sm text-slate-500 dark:text-slate-400">{subtitle}</p>}
-        </div>
-        {action}
-      </div>
-    )}
-    <div className="p-6">{children}</div>
-  </div>
-);
-
-// 状态徽章组件
-const Badge = ({ children, variant = 'default', className, ...props }: { children: React.ReactNode, variant?: 'default' | 'success' | 'warning' | 'danger', className?: string, [key: string]: any }) => {
-  const variants = {
-    default: "bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
-    success: "bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20",
-    warning: "bg-amber-50 text-amber-600 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20",
-    danger: "bg-rose-50 text-rose-600 border border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20",
-  };
-  return (
-    <span className={cn("px-2 py-0.5 text-xs font-medium rounded-full", variants[variant], className)} {...props}>
-      {children}
-    </span>
-  );
-};
 
 // --- 核心功能视图模块 ---
 
@@ -78,6 +50,11 @@ const DockerView = () => {
   const [containers, setContainers] = useState<ContainerInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [logs, setLogs] = useState<string | null>(null);
+  const [searchText, setSearchText] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'running' | 'stopped'>('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(8);
+  const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
 
   // 获取所有容器列表
   const fetchContainers = async () => {
@@ -96,6 +73,10 @@ const DockerView = () => {
   useEffect(() => {
     fetchContainers();
   }, []);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchText, statusFilter, pageSize, containers.length]);
 
   // 执行容器操作 (启动/停止/重启/删除)
   const handleAction = async (id: string, action: string) => {
@@ -118,75 +99,245 @@ const DockerView = () => {
     }
   };
 
+  const matchesContainer = (container: ContainerInfo) => {
+    const normalizedQuery = searchText.trim().toLowerCase();
+    const matchesStatus =
+      statusFilter === 'all' || (statusFilter === 'running' ? container.state === 'running' : container.state !== 'running');
+    if (!matchesStatus) return false;
+    if (!normalizedQuery) return true;
+    const haystack = [container.name, container.image, container.composeProject, container.composeService, container.status]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return haystack.includes(normalizedQuery);
+  };
+
+  const composeGroupMap = new Map<
+    string,
+    {
+      project: string;
+      containers: ContainerInfo[];
+      matchingContainers: ContainerInfo[];
+    }
+  >();
+  const standaloneContainers: ContainerInfo[] = [];
+
+  containers.forEach((container) => {
+    if (container.sourceKind === 'compose-project' && container.composeProject) {
+      const current = composeGroupMap.get(container.composeProject) || {
+        project: container.composeProject,
+        containers: [],
+        matchingContainers: [],
+      };
+      current.containers.push(container);
+      if (matchesContainer(container)) {
+        current.matchingContainers.push(container);
+      }
+      composeGroupMap.set(container.composeProject, current);
+      return;
+    }
+
+    if (matchesContainer(container)) {
+      standaloneContainers.push(container);
+    }
+  });
+
+  const composeGroups = Array.from(composeGroupMap.values())
+    .filter((group) => {
+      if (group.matchingContainers.length > 0) return true;
+      return group.project.toLowerCase().includes(searchText.trim().toLowerCase());
+    })
+    .sort((left, right) => left.project.localeCompare(right.project));
+
+  const topLevelItems = [
+    ...composeGroups.map((group) => ({ type: 'compose' as const, key: `compose:${group.project}`, group })),
+    ...standaloneContainers
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .map((container) => ({ type: 'container' as const, key: `container:${container.id}`, container })),
+  ];
+
+  const totalPages = Math.max(Math.ceil(topLevelItems.length / pageSize), 1);
+  const currentPage = Math.min(page, totalPages);
+  const pagedItems = topLevelItems.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const runningContainers = containers.filter((container) => container.state === 'running').length;
+  const composeProjectCount = composeGroups.length;
+  const standaloneCount = standaloneContainers.length;
+
+  const toggleProject = (projectName: string) => {
+    setExpandedProjects((current) => ({
+      ...current,
+      [projectName]: !current[projectName],
+    }));
+  };
+
+  const renderContainerActions = (container: ContainerInfo) => (
+    <div className="flex items-center justify-end gap-2">
+      <IconButton onClick={() => viewLogs(container.id)} title="查看日志">
+        <Terminal className="w-4 h-4" />
+      </IconButton>
+      {container.state === 'running' ? (
+        <IconButton onClick={() => handleAction(container.id, 'stop')} title="停止" variant="danger">
+          <Square className="w-4 h-4" />
+        </IconButton>
+      ) : (
+        <IconButton onClick={() => handleAction(container.id, 'start')} title="启动" variant="success">
+          <Play className="w-4 h-4" />
+        </IconButton>
+      )}
+      <IconButton onClick={() => handleAction(container.id, 'restart')} title="重启" variant="warning">
+        <RotateCcw className="w-4 h-4" />
+      </IconButton>
+      <IconButton onClick={() => handleAction(container.id, 'remove')} title="删除" variant="danger">
+        <Trash2 className="w-4 h-4" />
+      </IconButton>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Docker 镜像管理</h2>
-        <button 
-          onClick={fetchContainers}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white transition-colors bg-blue-600 rounded-lg hover:bg-blue-700"
-        >
-          <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
-          刷新状态
-        </button>
+      <PageHeader
+        icon={LayoutDashboard}
+        title="容器管理"
+        description="Compose 项目按项目折叠展示，独立容器按单项展示；所有筛选与分页都作用于顶层列表。"
+        actions={
+          <Button onClick={fetchContainers}>
+            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+            刷新状态
+          </Button>
+        }
+      />
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <StatCard label="运行中容器" value={String(runningContainers)} detail={`总计 ${containers.length} 个容器`} />
+        <StatCard label="Compose 项目" value={String(composeProjectCount)} detail="按项目聚合显示" />
+        <StatCard label="独立容器" value={String(standaloneCount)} detail="按单容器直接操作" />
       </div>
 
-      <Card>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="text-slate-500 dark:text-slate-400 text-sm border-b border-slate-200 dark:border-slate-800">
-                <th className="pb-4 font-medium">名称</th>
-                <th className="pb-4 font-medium">镜像</th>
-                <th className="pb-4 font-medium">状态</th>
-                <th className="pb-4 font-medium">运行时间</th>
-                <th className="pb-4 font-medium text-right">操作</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {containers.map((c) => (
-                <tr key={c.id} className="group hover:bg-slate-50 dark:hover:bg-slate-800/30">
-                  <td className="py-4 font-medium text-slate-900 dark:text-white">{c.name || 'Unknown'}</td>
-                  <td className="py-4 text-slate-500 dark:text-slate-400 text-sm">{c.image}</td>
-                  <td className="py-4">
-                    <Badge variant={c.state === 'running' ? 'success' : 'danger'}>
-                      {c.state}
-                    </Badge>
-                  </td>
-                  <td className="py-4 text-slate-500 dark:text-slate-400 text-sm">{c.status}</td>
-                  <td className="py-4">
-                    <div className="flex items-center justify-end gap-2">
-                      <button onClick={() => viewLogs(c.id)} className="p-2 text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors" title="查看日志">
-                        <Terminal className="w-4 h-4" />
-                      </button>
-                      {c.state === 'running' ? (
-                        <button onClick={() => handleAction(c.id, 'stop')} className="p-2 text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 transition-colors" title="停止">
-                          <Square className="w-4 h-4" />
-                        </button>
-                      ) : (
-                        <button onClick={() => handleAction(c.id, 'start')} className="p-2 text-slate-400 hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors" title="启动">
-                          <Play className="w-4 h-4" />
-                        </button>
-                      )}
-                      <button onClick={() => handleAction(c.id, 'restart')} className="p-2 text-slate-400 hover:text-amber-500 dark:hover:text-amber-400 transition-colors" title="重启">
-                        <RotateCcw className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => handleAction(c.id, 'remove')} className="p-2 text-slate-400 hover:text-rose-600 transition-colors" title="删除">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+      <Card title="容器列表">
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 rounded-2xl border border-[color:var(--border-subtle)] bg-[var(--surface-card-strong)] p-4 lg:grid-cols-[minmax(0,1.4fr)_220px_180px]">
+            <Field label="搜索范围" hint="项目名 / 容器名 / 镜像 / 服务名">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--text-tertiary)]" />
+                <Input
+                  value={searchText}
+                  onChange={(event) => setSearchText(event.target.value)}
+                  placeholder="搜索项目名、容器名、镜像或服务名"
+                  className="pl-10"
+                />
+              </div>
+            </Field>
+            <Field label="状态">
+              <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'all' | 'running' | 'stopped')}>
+                <option value="all">全部状态</option>
+                <option value="running">仅运行中</option>
+                <option value="stopped">仅已停止</option>
+              </Select>
+            </Field>
+            <Field label="每页数量">
+              <Select value={String(pageSize)} onChange={(event) => setPageSize(Number(event.target.value))}>
+                <option value="5">每页 5 条</option>
+                <option value="8">每页 8 条</option>
+                <option value="12">每页 12 条</option>
+              </Select>
+            </Field>
+          </div>
+
+          <div className="space-y-3">
+            {pagedItems.map((item) => {
+              if (item.type === 'compose') {
+                const isExpanded = expandedProjects[item.group.project] ?? true;
+                const runningCount = item.group.containers.filter((container) => container.state === 'running').length;
+                return (
+                  <div key={item.key} className="overflow-hidden rounded-2xl border border-[color:var(--border-subtle)] bg-[var(--surface-card-strong)] shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]">
+                    <button
+                      onClick={() => toggleProject(item.group.project)}
+                      className="flex w-full items-center justify-between gap-4 bg-[var(--surface-soft)] px-5 py-4 text-left transition hover:bg-[var(--surface-subtle)]"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <ChevronRight className={cn('h-4 w-4 text-[color:var(--text-tertiary)] transition-transform', isExpanded && 'rotate-90')} />
+                          <span className="font-semibold text-[color:var(--text-primary)]">{item.group.project}</span>
+                          <Badge variant="default">Compose 项目</Badge>
+                          <Badge variant="success">{runningCount}/{item.group.containers.length} 运行中</Badge>
+                          <Badge variant="warning">{item.group.containers.length} 个容器</Badge>
+                        </div>
+                        <p className="mt-2 text-sm text-[color:var(--text-tertiary)]">
+                          {item.group.matchingContainers.length === item.group.containers.length
+                            ? '当前筛选命中整个项目'
+                            : `当前筛选命中 ${item.group.matchingContainers.length} 个容器`}
+                        </p>
+                      </div>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="divide-y divide-[color:var(--border-subtle)]">
+                        {(item.group.matchingContainers.length > 0 ? item.group.matchingContainers : item.group.containers).map((container) => (
+                          <div key={container.id} className="px-5 py-4 grid grid-cols-1 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_160px_220px] gap-4 items-center">
+                            <div className="min-w-0">
+                              <p className="truncate font-medium text-[color:var(--text-primary)]">{container.name}</p>
+                              <p className="mt-1 truncate text-sm text-[color:var(--text-tertiary)]">
+                                服务：{container.composeService || '-'}
+                              </p>
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm text-[color:var(--text-primary)]">{container.image}</p>
+                              <p className="mt-1 truncate text-xs text-[color:var(--text-tertiary)]">
+                                端口：{container.ports.length > 0 ? container.ports.join(', ') : '无暴露端口'}
+                              </p>
+                            </div>
+                            <div>
+                              <Badge variant={container.state === 'running' ? 'success' : 'danger'}>{container.state}</Badge>
+                              <p className="mt-2 text-xs text-[color:var(--text-tertiary)]">{container.status}</p>
+                            </div>
+                            {renderContainerActions(container)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              const container = item.container;
+              return (
+                <div key={item.key} className="grid grid-cols-1 items-center gap-4 rounded-2xl border border-[color:var(--border-subtle)] bg-[var(--surface-card-strong)] px-5 py-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_160px_220px]">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <p className="truncate font-semibold text-[color:var(--text-primary)]">{container.name}</p>
+                      <Badge variant="default">独立容器</Badge>
                     </div>
-                  </td>
-                </tr>
-              ))}
-              {containers.length === 0 && !loading && (
-                <tr>
-                  <td colSpan={5} className="py-12 text-center text-slate-500">
-                    未检测到运行中的 Docker 容器
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                    <p className="mt-2 text-xs text-[color:var(--text-tertiary)]">{container.id}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm text-[color:var(--text-primary)]">{container.image}</p>
+                    <p className="mt-1 truncate text-xs text-[color:var(--text-tertiary)]">
+                      端口：{container.ports.length > 0 ? container.ports.join(', ') : '无暴露端口'}
+                    </p>
+                  </div>
+                  <div>
+                    <Badge variant={container.state === 'running' ? 'success' : 'danger'}>{container.state}</Badge>
+                    <p className="mt-2 text-xs text-[color:var(--text-tertiary)]">{container.status}</p>
+                  </div>
+                  {renderContainerActions(container)}
+                </div>
+              );
+            })}
+
+            {topLevelItems.length === 0 && !loading && (
+              <div className="rounded-2xl border border-dashed border-[color:var(--border-strong)] py-12 text-center text-[color:var(--text-tertiary)]">
+                当前筛选条件下没有匹配的 Compose 项目或独立容器
+              </div>
+            )}
+          </div>
+
+          <PaginationControls
+            page={currentPage}
+            totalPages={totalPages}
+            totalItems={topLevelItems.length}
+            pageSize={pageSize}
+            onPageChange={setPage}
+          />
         </div>
       </Card>
 
@@ -197,19 +348,25 @@ const DockerView = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/60 dark:bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(2,6,23,0.58)] p-6 backdrop-blur-sm"
           >
-            <div className="w-full max-w-4xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800">
-                <h3 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-                  <Terminal className="w-5 h-5 text-blue-500 dark:text-blue-400" />
+            <div className="flex max-h-[80vh] w-full max-w-4xl flex-col overflow-hidden rounded-[1.75rem] border border-[color:var(--border-subtle)] bg-[var(--surface-card)] shadow-2xl backdrop-blur-xl">
+              <div className="flex items-center justify-between border-b border-[color:var(--border-subtle)] px-6 py-4">
+                <h3 className="flex items-center gap-2 text-lg font-semibold text-[color:var(--text-primary)]">
+                  <Terminal className="h-5 w-5 text-[var(--brand-500)]" />
                   容器日志
                 </h3>
-                <button onClick={() => setLogs(null)} className="text-slate-400 hover:text-slate-900 dark:hover:text-white">
-                  <Trash2 className="w-5 h-5" />
-                </button>
+                <IconButton onClick={() => setLogs(null)} title="关闭日志">
+                  <Trash2 className="h-5 w-5" />
+                </IconButton>
               </div>
-              <div className="flex-1 p-6 overflow-auto font-mono text-sm text-slate-800 dark:text-slate-300 bg-slate-50 dark:bg-black/40">
+              <div
+                className="flex-1 overflow-auto p-6 font-mono text-sm"
+                style={{
+                  backgroundColor: 'var(--console-bg)',
+                  color: 'var(--console-text)',
+                }}
+              >
                 <pre className="whitespace-pre-wrap">{logs}</pre>
               </div>
             </div>
@@ -232,6 +389,11 @@ const DNSView = ({ config }: { config: AppConfig | null }) => {
   const [availableZones, setAvailableZones] = useState<{id: string, name: string}[]>([]);
   const [isFallbackMode, setIsFallbackMode] = useState(false);
   const [zonesLoaded, setZonesLoaded] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [proxyFilter, setProxyFilter] = useState<'all' | 'proxied' | 'dns-only'>('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // 初始化获取可用域名
   useEffect(() => {
@@ -285,6 +447,10 @@ const DNSView = ({ config }: { config: AppConfig | null }) => {
     }
   }, [config, selectedDomain]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [searchText, typeFilter, proxyFilter, pageSize, selectedDomain, records.length]);
+
   // 保存或更新 DNS 记录
   const handleSave = async () => {
     try {
@@ -332,130 +498,182 @@ const DNSView = ({ config }: { config: AppConfig | null }) => {
   if (!config?.hasCfToken) {
     return (
       <div className="space-y-6">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-white">DNS 代理模块</h2>
+        <PageHeader
+          icon={Globe}
+          title="DNS 代理模块"
+          description="统一管理 Cloudflare DNS 记录与代理状态。"
+        />
         <Card>
-          <div className="py-12 text-center">
-            <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-2">未配置 Cloudflare</h3>
-            <p className="text-slate-500 dark:text-slate-400">请在 .env 文件中配置 CF_API_TOKEN 以启用此功能。</p>
-          </div>
+          <EmptyState
+            icon={AlertCircle}
+            title="未配置 Cloudflare"
+            description="请先在 .env 中配置 CF_API_TOKEN，保存后再进入 DNS 代理模块。"
+          />
         </Card>
       </div>
     );
   }
 
+  const filteredRecords = records.filter((record) => {
+    const normalizedQuery = searchText.trim().toLowerCase();
+    const matchesQuery =
+      !normalizedQuery ||
+      [record.name, record.content, record.type]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(normalizedQuery);
+    const matchesType = typeFilter === 'all' || record.type === typeFilter;
+    const matchesProxy =
+      proxyFilter === 'all' || (proxyFilter === 'proxied' ? record.proxied : !record.proxied);
+    return matchesQuery && matchesType && matchesProxy;
+  });
+
+  const typeOptions = Array.from(new Set(records.map((record) => record.type))).sort();
+  const totalPages = Math.max(Math.ceil(filteredRecords.length / pageSize), 1);
+  const currentPage = Math.min(page, totalPages);
+  const pagedRecords = filteredRecords.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   return (
     <div className="space-y-6">
       {isFallbackMode && (
-        <div className="p-4 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-          <div>
-            <h4 className="text-sm font-medium text-amber-800 dark:text-amber-400">降级告警：未获取到完整 Zone 读取权限</h4>
-            <p className="text-sm text-amber-700 dark:text-amber-500/80 mt-1">
-              当前 Token 缺乏全局的 Zone:Read 权限，系统已被迫退回兜底模式，域名列表仅使用 ALLOWED_DOMAINS 呈现。后台使用的是强绑定的 CF_ZONE_ID，若下拉选择了其他无关域名操作，将会引发 403 / 404 错误。请务必确认操作范围一致。
-            </p>
-          </div>
-        </div>
+        <Notice tone="warning" title="降级告警：未获取到完整 Zone 读取权限">
+          当前 Token 缺乏全局的 Zone:Read 权限，域名列表仅能使用 `ALLOWED_DOMAINS` 兜底展示。后台仍绑定 `CF_ZONE_ID`，如果下拉选择了不匹配的域名，可能触发 403 / 404。
+        </Notice>
       )}
 
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-white">DNS 代理模块</h2>
-        <div className="flex items-center gap-3">
-          {/* 域名选择器 */}
-          {availableZones && availableZones.length > 0 && (
-            <select 
-              value={selectedDomain}
-              onChange={(e) => setSelectedDomain(e.target.value)}
-              className={cn("px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none", availableZones.length <= 1 && "bg-slate-50 dark:bg-slate-900 text-slate-500 cursor-not-allowed")}
-              disabled={availableZones.length <= 1}
+      <PageHeader
+        icon={Globe}
+        title="DNS 代理模块"
+        description="支持按域名切换、分页浏览、快速筛选和代理状态编辑。"
+        actions={
+          <div className="grid w-full gap-3 md:w-auto md:min-w-[420px] md:grid-cols-[minmax(0,260px)_auto_auto] md:items-center">
+            {availableZones && availableZones.length > 0 && (
+              <Select
+                value={selectedDomain}
+                onChange={(e) => setSelectedDomain(e.target.value)}
+                className={cn("w-full min-w-0", availableZones.length <= 1 && "cursor-not-allowed opacity-70")}
+                disabled={availableZones.length <= 1}
+              >
+                {availableZones.map((z) => (
+                  <option key={z.name} value={z.name}>{z.name}</option>
+                ))}
+              </Select>
+            )}
+            <div className="flex items-center justify-end md:justify-center">
+              <IconButton onClick={fetchRecords} title="刷新 DNS 记录">
+                <RefreshCw className={cn("w-5 h-5", loading && "animate-spin")} />
+              </IconButton>
+            </div>
+            <Button
+              className="justify-center"
+              onClick={() => {
+                setEditingId(null);
+                setNewRecord({ name: '', content: config?.vpsIp || '', type: 'A', proxied: config?.cfProxied || false, domain: selectedDomain });
+                setShowAdd(true);
+              }}
             >
-              {availableZones.map(z => (
-                <option key={z.name} value={z.name}>{z.name}</option>
-              ))}
-            </select>
-          )}
-          <button 
-            onClick={fetchRecords}
-            className="p-2 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700"
-          >
-            <RefreshCw className={cn("w-5 h-5", loading && "animate-spin")} />
-          </button>
-          <button 
-            onClick={() => {
-              setEditingId(null);
-              setNewRecord({ name: '', content: config?.vpsIp || '', type: 'A', proxied: config?.cfProxied || false, domain: selectedDomain });
-              setShowAdd(true);
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700"
-          >
-            <Plus className="w-4 h-4" />
-            添加记录
-          </button>
-        </div>
-      </div>
+              <Plus className="w-4 h-4" />
+              添加记录
+            </Button>
+          </div>
+        }
+      />
 
       {/* 添加/编辑表单 */}
       {showAdd && (
-        <Card title={editingId ? "编辑 DNS 记录" : "添加 DNS 记录"}>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-            <div className="space-y-2">
-              <label className="text-sm text-slate-500 dark:text-slate-400">记录类型</label>
-              <select 
+        <Card title={editingId ? "编辑 DNS 记录" : "添加 DNS 记录"} subtitle="变更会直接写入当前所选 Zone。">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
+            <Field label="记录类型">
+              <Select
                 value={newRecord.type}
                 onChange={(e) => setNewRecord({...newRecord, type: e.target.value})}
-                className="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
               >
                 <option value="A">A</option>
                 <option value="CNAME">CNAME</option>
                 <option value="TXT">TXT</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm text-slate-500 dark:text-slate-400">名称 (Name)</label>
-              <input 
+              </Select>
+            </Field>
+            <Field label="名称 (Name)">
+              <Input
                 type="text" 
                 value={newRecord.name}
                 onChange={(e) => setNewRecord({...newRecord, name: e.target.value})}
-                className="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
                 placeholder="subdomain"
               />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm text-slate-500 dark:text-slate-400">内容 (Content)</label>
-              <input 
+            </Field>
+            <Field label="内容 (Content)">
+              <Input
                 type="text" 
                 value={newRecord.content}
                 onChange={(e) => setNewRecord({...newRecord, content: e.target.value})}
-                className="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
                 placeholder="1.2.3.4"
               />
-            </div>
-            <div className="space-y-2 flex flex-col justify-end pb-2">
-              <div className="flex items-center gap-2">
-                <input 
+            </Field>
+            <Field label="代理状态" hint="Cloudflare 云朵开关">
+              <label className="mt-3 inline-flex items-center gap-2 text-sm text-[color:var(--text-secondary)]">
+                <Checkbox
                   type="checkbox" 
                   id="proxied" 
                   checked={newRecord.proxied}
                   onChange={(e) => setNewRecord({...newRecord, proxied: e.target.checked})}
-                  className="w-4 h-4 rounded border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-blue-600 focus:ring-blue-500 focus:ring-offset-white dark:focus:ring-offset-slate-900"
                 />
-                <label htmlFor="proxied" className="text-sm text-slate-600 dark:text-slate-300">Proxied (云朵开启)</label>
-              </div>
-            </div>
+                <span>Proxied (云朵开启)</span>
+              </label>
+            </Field>
           </div>
           <div className="flex justify-end gap-3">
-            <button onClick={() => { setShowAdd(false); setEditingId(null); }} className="px-4 py-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">取消</button>
-            <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">保存</button>
+            <Button onClick={() => { setShowAdd(false); setEditingId(null); }} variant="ghost">取消</Button>
+            <Button onClick={handleSave}>保存</Button>
           </div>
         </Card>
       )}
 
       {/* 记录列表 */}
-      <Card>
-        <div className="overflow-x-auto">
+      <Card title="记录列表" subtitle="支持按名称、内容、类型和代理状态筛选，并按页查看当前域名下的 DNS 记录。">
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 rounded-2xl border border-[color:var(--border-subtle)] bg-[var(--surface-card-strong)] p-4 md:grid-cols-[minmax(0,1fr)_160px_180px_160px]">
+            <Field label="搜索">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--text-tertiary)]" />
+                <Input
+                  value={searchText}
+                  onChange={(event) => setSearchText(event.target.value)}
+                  placeholder="搜索名称、内容或类型"
+                  className="pl-10"
+                />
+              </div>
+            </Field>
+            <Field label="类型">
+              <Select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
+                <option value="all">全部类型</option>
+                {typeOptions.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="代理状态">
+              <Select value={proxyFilter} onChange={(event) => setProxyFilter(event.target.value as 'all' | 'proxied' | 'dns-only')}>
+                <option value="all">全部代理状态</option>
+                <option value="proxied">仅 Proxied</option>
+                <option value="dns-only">仅 DNS Only</option>
+              </Select>
+            </Field>
+            <Field label="每页数量">
+              <Select value={String(pageSize)} onChange={(event) => setPageSize(Number(event.target.value))}>
+                <option value="10">每页 10 条</option>
+                <option value="20">每页 20 条</option>
+                <option value="50">每页 50 条</option>
+              </Select>
+            </Field>
+          </div>
+
+          <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className="text-slate-500 dark:text-slate-400 text-sm border-b border-slate-200 dark:border-slate-800">
+              <tr className="text-sm text-[color:var(--text-tertiary)] border-b border-[color:var(--border-subtle)]">
                 <th className="pb-4 font-medium">类型</th>
                 <th className="pb-4 font-medium">名称</th>
                 <th className="pb-4 font-medium">内容</th>
@@ -463,12 +681,12 @@ const DNSView = ({ config }: { config: AppConfig | null }) => {
                 <th className="pb-4 font-medium text-right">操作</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {records.map((r) => (
-                <tr key={r.id} className="group hover:bg-slate-50 dark:hover:bg-slate-800/30">
-                  <td className="py-4 font-medium text-blue-500 dark:text-blue-400">{r.type}</td>
-                  <td className="py-4 text-slate-900 dark:text-white max-w-[150px] truncate" title={r.name}>{r.name}</td>
-                  <td className="py-4 text-slate-500 dark:text-slate-400 text-sm max-w-xs truncate" title={r.content}>{r.content}</td>
+            <tbody className="divide-y divide-[color:var(--border-subtle)]">
+              {pagedRecords.map((r) => (
+                <tr key={r.id} className="group hover:bg-[var(--surface-soft)]/50">
+                  <td className="py-4 font-medium text-[var(--brand-500)]">{r.type}</td>
+                  <td className="py-4 max-w-[150px] truncate text-[color:var(--text-primary)]" title={r.name}>{r.name}</td>
+                  <td className="py-4 max-w-xs truncate text-sm text-[color:var(--text-tertiary)]" title={r.content}>{r.content}</td>
                   <td className="py-4">
                     <Badge variant={r.proxied ? 'warning' : 'default'}>
                       {r.proxied ? 'Proxied' : 'DNS Only'}
@@ -476,25 +694,34 @@ const DNSView = ({ config }: { config: AppConfig | null }) => {
                   </td>
                   <td className="py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <button onClick={() => handleEdit(r)} className="p-2 text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors" title="编辑">
+                      <IconButton onClick={() => handleEdit(r)} title="编辑">
                         <Edit3 className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => handleDelete(r.id)} className="p-2 text-slate-400 hover:text-rose-600 transition-colors" title="删除">
+                      </IconButton>
+                      <IconButton onClick={() => handleDelete(r.id)} title="删除" variant="danger">
                         <Trash2 className="w-4 h-4" />
-                      </button>
+                      </IconButton>
                     </div>
                   </td>
                 </tr>
               ))}
-              {records.length === 0 && !loading && (
+              {filteredRecords.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-slate-500">
-                    未找到 DNS 记录
+                  <td colSpan={5} className="py-12 text-center text-[color:var(--text-tertiary)]">
+                    当前筛选条件下未找到 DNS 记录
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
+          </div>
+
+          <PaginationControls
+            page={currentPage}
+            totalPages={totalPages}
+            totalItems={filteredRecords.length}
+            pageSize={pageSize}
+            onPageChange={setPage}
+          />
         </div>
       </Card>
     </div>
@@ -603,84 +830,73 @@ networks:
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-white">部署 Docker 项目</h2>
-        <button 
-          onClick={handleDeploy}
-          className="flex items-center gap-2 px-6 py-2 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 shadow-lg shadow-emerald-500/20"
-        >
-          <Play className="w-4 h-4" />
-          立即部署
-        </button>
-      </div>
+      <PageHeader
+        icon={FileCode}
+        title="部署 Docker 项目"
+        description="输入镜像、服务名和端口后快速生成 Compose 配置，再进行在线编辑与部署。"
+        actions={
+          <Button onClick={handleDeploy} variant="success" size="lg">
+            <Play className="w-4 h-4" />
+            立即部署
+          </Button>
+        }
+      />
 
       <Card title="项目配置" subtitle="填写基本信息生成推荐的 Compose 配置，包含 proxy_net 网络以便 Nginx 代理">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          <div className="space-y-2">
-            <label className="text-sm text-slate-500 dark:text-slate-400">镜像名 (Image)</label>
-            <input 
+          <Field label="镜像名 (Image)">
+            <Input
               type="text" 
               value={imageName}
               onChange={(e) => setImageName(e.target.value)}
               placeholder="例如: nginx:latest, ghcr.io/komari-monitor/komari:latest"
-              className="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
             />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm text-slate-500 dark:text-slate-400">服务名 (Service Name)</label>
-            <input 
+          </Field>
+          <Field label="服务名 (Service Name)">
+            <Input
               type="text" 
               value={serviceName}
               onChange={(e) => setServiceName(e.target.value)}
               placeholder="例如: web, komari"
-              className="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
             />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm text-slate-500 dark:text-slate-400">容器内端口 (Expose Port)</label>
-            <input 
+          </Field>
+          <Field label="容器内端口 (Expose Port)">
+            <Input
               type="text" 
               value={containerPort}
               onChange={(e) => setContainerPort(e.target.value)}
               placeholder="例如: 80, 25774"
-              className="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
             />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm text-slate-500 dark:text-slate-400">备注 (可选)</label>
-            <input 
+          </Field>
+          <Field label="备注 (可选)">
+            <Input
               type="text" 
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
               placeholder="项目备注信息"
-              className="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
             />
-          </div>
+          </Field>
         </div>
         <div className="flex justify-end">
-          <button 
-            onClick={handleGenerate}
-            disabled={isGenerating || !imageName.trim() || !serviceName.trim() || !containerPort.trim()}
-            className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+          <Button onClick={handleGenerate} disabled={isGenerating || !imageName.trim() || !serviceName.trim() || !containerPort.trim()}>
             {isGenerating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <FileCode className="w-4 h-4" />}
             生成配置
-          </button>
+          </Button>
         </div>
       </Card>
 
-      <Card title="Docker Compose 编辑器" subtitle="在线编辑并下发部署文件">
+      <Card title="Docker Compose 编辑器">
         <div className="relative">
-          <textarea 
+          <Textarea
             value={yaml}
             onChange={(e) => setYaml(e.target.value)}
-            className="w-full h-[400px] p-6 bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl font-mono text-sm text-emerald-600 dark:text-emerald-400 focus:ring-2 focus:ring-emerald-500 outline-none resize-none"
+            className="h-[400px] resize-none bg-[var(--surface-subtle)] font-mono text-sm text-emerald-700 dark:text-emerald-300"
             spellCheck={false}
           />
           <div className="absolute top-4 right-4 flex gap-2">
-            <button className="p-2 bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-lg hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700 shadow-sm" title="保存草稿">
+            <IconButton title="保存草稿">
               <Save className="w-4 h-4" />
-            </button>
+            </IconButton>
           </div>
         </div>
       </Card>
@@ -737,54 +953,50 @@ const ProxyView = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Nginx 路由 & 证书</h2>
-        <button 
-          onClick={() => setShowAdd(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700"
-        >
-          <Plus className="w-4 h-4" />
-          添加代理
-        </button>
-      </div>
+      <PageHeader
+        icon={Network}
+        title="Nginx 路由与证书"
+        description="维护域名到容器服务的映射，并按需自动申请 Let's Encrypt 证书。"
+        actions={
+          <Button onClick={() => setShowAdd(true)}>
+            <Plus className="w-4 h-4" />
+            添加代理
+          </Button>
+        }
+      />
 
       {showAdd && (
-        <Card title="添加反向代理">
+        <Card title="添加反向代理" subtitle="保存后会触发 Nginx 配置重载。">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div className="space-y-2">
-              <label className="text-sm text-slate-500 dark:text-slate-400">域名 (Domain)</label>
-              <input 
+            <Field label="域名 (Domain)">
+              <Input
                 type="text" 
                 value={newRoute.domain}
                 onChange={(e) => setNewRoute({...newRoute, domain: e.target.value})}
-                className="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
                 placeholder="app.example.com"
               />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm text-slate-500 dark:text-slate-400">目标地址 (Target)</label>
-              <input 
+            </Field>
+            <Field label="目标地址 (Target)">
+              <Input
                 type="text" 
                 value={newRoute.target}
                 onChange={(e) => setNewRoute({...newRoute, target: e.target.value})}
-                className="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
                 placeholder="127.0.0.1:8000"
               />
-            </div>
+            </Field>
           </div>
-          <div className="flex items-center gap-2 mb-6">
-            <input 
+          <label className="mb-6 inline-flex items-center gap-2 text-sm text-[color:var(--text-secondary)]">
+            <Checkbox
               type="checkbox" 
               id="ssl" 
               checked={newRoute.ssl}
               onChange={(e) => setNewRoute({...newRoute, ssl: e.target.checked})}
-              className="w-4 h-4 rounded border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-blue-600 focus:ring-blue-500 focus:ring-offset-white dark:focus:ring-offset-slate-900"
             />
-            <label htmlFor="ssl" className="text-sm text-slate-600 dark:text-slate-300">自动申请 SSL 证书 (Let's Encrypt)</label>
-          </div>
+            <span>自动申请 SSL 证书 (Let's Encrypt)</span>
+          </label>
           <div className="flex justify-end gap-3">
-            <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">取消</button>
-            <button onClick={handleAdd} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">保存并重载 Nginx</button>
+            <Button onClick={() => setShowAdd(false)} variant="ghost">取消</Button>
+            <Button onClick={handleAdd}>保存并重载 Nginx</Button>
           </div>
         </Card>
       )}
@@ -792,10 +1004,11 @@ const ProxyView = () => {
       <div className="grid grid-cols-1 gap-4">
         {routes.length === 0 ? (
           <Card>
-            <div className="py-12 text-center">
-              <Network className="w-12 h-12 text-slate-300 dark:text-slate-700 mx-auto mb-4" />
-              <p className="text-slate-500">暂无代理配置，点击上方按钮添加</p>
-            </div>
+            <EmptyState
+              icon={Network}
+              title="暂无代理配置"
+              description="添加一个域名到容器服务的映射，系统会自动同步 Nginx 配置。"
+            />
           </Card>
         ) : (
           routes.map(r => (
@@ -803,24 +1016,24 @@ const ProxyView = () => {
               <Card>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-blue-500 dark:text-blue-400">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--surface-soft)] text-[var(--brand-500)]">
                       <Network className="w-6 h-6" />
                     </div>
                     <div>
-                      <h4 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                      <h4 className="flex items-center gap-2 text-lg font-semibold text-[color:var(--text-primary)]">
                         {r.domain}
-                        {r.ssl && <ShieldCheck className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />}
+                        {r.ssl && <ShieldCheck className="w-4 h-4 text-emerald-500" />}
                       </h4>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">指向: {r.target}</p>
+                      <p className="text-sm text-[color:var(--text-tertiary)]">指向: {r.target}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <Badge variant={r.ssl ? 'success' : 'warning'}>
                       {r.ssl ? 'HTTPS 已开启' : 'HTTP'}
                     </Badge>
-                    <button onClick={() => handleDelete(r.id)} className="p-2 text-slate-400 hover:text-rose-600 transition-colors">
+                    <IconButton onClick={() => handleDelete(r.id)} title="删除代理" variant="danger">
                       <Trash2 className="w-5 h-5" />
-                    </button>
+                    </IconButton>
                   </div>
                 </div>
               </Card>
@@ -869,22 +1082,23 @@ const CertView = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-white">证书管理模块</h2>
-        <button 
-          onClick={fetchCerts}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 dark:text-white transition-colors bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700"
-        >
-          <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
-          刷新状态
-        </button>
-      </div>
+      <PageHeader
+        icon={ShieldCheck}
+        title="证书管理模块"
+        description="查看域名证书状态，必要时手动发起续约。"
+        actions={
+          <Button onClick={fetchCerts} variant="secondary">
+            <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+            刷新状态
+          </Button>
+        }
+      />
 
       <Card>
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className="text-slate-500 dark:text-slate-400 text-sm border-b border-slate-200 dark:border-slate-800">
+              <tr className="text-sm text-[color:var(--text-tertiary)] border-b border-[color:var(--border-subtle)]">
                 <th className="pb-4 font-medium">域名</th>
                 <th className="pb-4 font-medium">签发日期</th>
                 <th className="pb-4 font-medium">过期日期</th>
@@ -892,33 +1106,30 @@ const CertView = () => {
                 <th className="pb-4 font-medium text-right">操作</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+            <tbody className="divide-y divide-[color:var(--border-subtle)]">
               {certs.map((c, i) => (
-                <tr key={i} className="group hover:bg-slate-50 dark:hover:bg-slate-800/30">
-                  <td className="py-4 font-medium text-slate-900 dark:text-white flex items-center gap-2">
-                    <ShieldCheck className={cn("w-4 h-4", c.status === 'valid' ? "text-emerald-500 dark:text-emerald-400" : "text-rose-500 dark:text-rose-400")} />
+                <tr key={i} className="group hover:bg-[var(--surface-soft)]/50">
+                  <td className="py-4 font-medium text-[color:var(--text-primary)] flex items-center gap-2">
+                    <ShieldCheck className={cn("w-4 h-4", c.status === 'valid' ? "text-emerald-500" : "text-rose-500")} />
                     {c.domain}
                   </td>
-                  <td className="py-4 text-slate-500 dark:text-slate-400 text-sm">{c.issueDate}</td>
-                  <td className="py-4 text-slate-500 dark:text-slate-400 text-sm">{c.expiryDate}</td>
+                  <td className="py-4 text-sm text-[color:var(--text-tertiary)]">{c.issueDate}</td>
+                  <td className="py-4 text-sm text-[color:var(--text-tertiary)]">{c.expiryDate}</td>
                   <td className="py-4">
                     <Badge variant={c.status === 'valid' ? 'success' : 'danger'}>
                       {c.status === 'valid' ? '正常' : '已过期'}
                     </Badge>
                   </td>
                   <td className="py-4 text-right">
-                    <button 
-                      onClick={() => handleRenew(c.domain)}
-                      className="px-3 py-1 text-sm text-blue-500 dark:text-blue-400 border border-blue-500/30 rounded hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors"
-                    >
+                    <Button onClick={() => handleRenew(c.domain)} variant="secondary" size="sm">
                       手动续约
-                    </button>
+                    </Button>
                   </td>
                 </tr>
               ))}
               {certs.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-slate-500">
+                  <td colSpan={5} className="py-12 text-center text-[color:var(--text-tertiary)]">
                     未找到证书信息，请在路由转发中开启 SSL
                   </td>
                 </tr>
@@ -933,116 +1144,7 @@ const CertView = () => {
 
 // 6. Docker 迁移视图 (SSH)
 const MigrationView = () => {
-  const [form, setForm] = useState({ host: '', port: '22', username: 'root', password: '', privateKey: '' });
-  const [logs, setLogs] = useState('');
-  const [migrating, setMigrating] = useState(false);
-
-  // 开始迁移流程
-  const handleMigrate = async () => {
-    if (!form.host || !form.username) return alert("请填写目标机器 IP 和用户名");
-    setLogs('');
-    setMigrating(true);
-    try {
-      const res = await apiFetch('/api/migrate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form)
-      });
-      // 处理流式响应，实时显示日志
-      const reader = res.body?.getReader();
-      const decoder = new TextDecoder();
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          setLogs(prev => prev + decoder.decode(value));
-        }
-      }
-    } catch (e: any) {
-      setLogs(prev => prev + '\nError: ' + e.message);
-    } finally {
-      setMigrating(false);
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Docker 全量迁移</h2>
-        <button 
-          onClick={handleMigrate}
-          disabled={migrating}
-          className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
-        >
-          {migrating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-          开始迁移
-        </button>
-      </div>
-
-      <Card title="目标机器 SSH 配置" subtitle="将当前机器的所有 Docker 服务和数据完整迁移至目标机器">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <label className="text-sm text-slate-500 dark:text-slate-400">目标 IP (Host)</label>
-            <input 
-              type="text" 
-              value={form.host}
-              onChange={(e) => setForm({...form, host: e.target.value})}
-              className="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-              placeholder="192.168.1.100"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm text-slate-500 dark:text-slate-400">端口 (Port)</label>
-            <input 
-              type="text" 
-              value={form.port}
-              onChange={(e) => setForm({...form, port: e.target.value})}
-              className="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-              placeholder="22"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm text-slate-500 dark:text-slate-400">用户名 (Username)</label>
-            <input 
-              type="text" 
-              value={form.username}
-              onChange={(e) => setForm({...form, username: e.target.value})}
-              className="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-              placeholder="root"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm text-slate-500 dark:text-slate-400">密码 (Password) - 可选</label>
-            <input 
-              type="password" 
-              value={form.password}
-              onChange={(e) => setForm({...form, password: e.target.value})}
-              className="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-              placeholder="********"
-            />
-          </div>
-          <div className="space-y-2 md:col-span-2">
-            <label className="text-sm text-slate-500 dark:text-slate-400">私钥 (Private Key) - 可选</label>
-            <textarea 
-              value={form.privateKey}
-              onChange={(e) => setForm({...form, privateKey: e.target.value})}
-              className="w-full h-24 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none font-mono text-sm"
-              placeholder="-----BEGIN OPENSSH PRIVATE KEY-----..."
-            />
-          </div>
-        </div>
-      </Card>
-
-      {/* 迁移日志输出 */}
-      {logs && (
-        <Card title="迁移日志">
-          <div className="w-full h-[300px] p-4 bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl font-mono text-sm text-slate-800 dark:text-slate-300 overflow-auto whitespace-pre-wrap">
-            {logs}
-          </div>
-        </Card>
-      )}
-    </div>
-  );
+  return <MigrationConsole apiFetch={apiFetch} />;
 };
 
 // 7. 系统设置视图
@@ -1084,66 +1186,54 @@ const SettingsView = ({ config, onConfigChange }: { config: AppConfig | null, on
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-white">在线服务配置</h2>
-        <div className="flex gap-3">
-          {mode === 'view' && (
-            <button 
-              onClick={() => setMode('edit')}
-              className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700"
-            >
-              <Edit3 className="w-4 h-4" />
-              编辑配置
-            </button>
-          )}
-          {mode === 'edit' && (
-            <>
-              <button 
-                onClick={() => setMode('view')}
-                className="px-6 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-              >
-                取消
-              </button>
-              <button 
-                onClick={() => setMode('preview')}
-                className="flex items-center gap-2 px-6 py-2 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700"
-              >
-                <Eye className="w-4 h-4" />
-                预览修改
-              </button>
-            </>
-          )}
-          {mode === 'preview' && (
-            <>
-              <button 
-                onClick={() => setMode('edit')}
-                className="px-6 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-              >
-                返回编辑
-              </button>
-              <button 
-                onClick={handleSaveEnv}
-                disabled={saving}
-                className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
-              >
-                {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                保存并生效
-              </button>
-            </>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        icon={Settings}
+        title="在线服务配置"
+        description="统一管理 .env 内容与当前生效配置状态。"
+        actions={
+          <div className="flex gap-3 flex-wrap">
+            {mode === 'view' && (
+              <Button onClick={() => setMode('edit')}>
+                <Edit3 className="w-4 h-4" />
+                编辑配置
+              </Button>
+            )}
+            {mode === 'edit' && (
+              <>
+                <Button onClick={() => setMode('view')} variant="ghost">
+                  取消
+                </Button>
+                <Button onClick={() => setMode('preview')} variant="success">
+                  <Eye className="w-4 h-4" />
+                  预览修改
+                </Button>
+              </>
+            )}
+            {mode === 'preview' && (
+              <>
+                <Button onClick={() => setMode('edit')} variant="ghost">
+                  返回编辑
+                </Button>
+                <Button onClick={handleSaveEnv} disabled={saving}>
+                  {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  保存并生效
+                </Button>
+              </>
+            )}
+          </div>
+        }
+      />
 
       <Card title="环境变量 (.env)" subtitle={mode === 'view' ? "只读模式" : mode === 'edit' ? "编辑模式" : "预览模式"}>
         {mode === 'edit' ? (
-          <textarea 
+          <Textarea
             value={envContent}
             onChange={(e) => setEnvContent(e.target.value)}
-            className="w-full h-[300px] p-6 bg-white dark:bg-black/40 border border-slate-300 dark:border-slate-800 rounded-xl font-mono text-sm text-blue-600 dark:text-blue-400 focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+            className="h-[300px] resize-none bg-[var(--surface-subtle)] font-mono text-sm text-blue-700 dark:text-blue-300"
             spellCheck={false}
           />
         ) : (
-          <div className="w-full h-[300px] p-6 bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl font-mono text-sm text-slate-800 dark:text-slate-300 overflow-auto whitespace-pre-wrap">
+          <div className="h-[300px] w-full overflow-auto whitespace-pre-wrap rounded-xl border border-[color:var(--border-subtle)] bg-[var(--surface-subtle)] p-6 font-mono text-sm text-[color:var(--text-primary)]">
             {envContent || '文件为空'}
           </div>
         )}
@@ -1152,20 +1242,20 @@ const SettingsView = ({ config, onConfigChange }: { config: AppConfig | null, on
       <Card title="当前加载的配置状态">
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
-              <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">VPS 公网 IP</p>
-              <p className="text-slate-900 dark:text-white font-mono">{config?.vpsIp || '未配置'}</p>
+            <div className="rounded-xl border border-[color:var(--border-subtle)] bg-[var(--surface-card-strong)] p-4">
+              <p className="mb-1 text-sm text-[color:var(--text-tertiary)]">VPS 公网 IP</p>
+              <p className="font-mono text-[color:var(--text-primary)]">{config?.vpsIp || '未配置'}</p>
             </div>
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
-              <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Nginx 容器名称</p>
-              <p className="text-slate-900 dark:text-white font-mono">{config?.nginxContainer}</p>
+            <div className="rounded-xl border border-[color:var(--border-subtle)] bg-[var(--surface-card-strong)] p-4">
+              <p className="mb-1 text-sm text-[color:var(--text-tertiary)]">Nginx 容器名称</p>
+              <p className="font-mono text-[color:var(--text-primary)]">{config?.nginxContainer}</p>
             </div>
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
-              <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">证书代理容器</p>
-              <p className="text-slate-900 dark:text-white font-mono">{config?.certAgentContainer}</p>
+            <div className="rounded-xl border border-[color:var(--border-subtle)] bg-[var(--surface-card-strong)] p-4">
+              <p className="mb-1 text-sm text-[color:var(--text-tertiary)]">证书代理容器</p>
+              <p className="font-mono text-[color:var(--text-primary)]">{config?.certAgentContainer}</p>
             </div>
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
-              <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Cloudflare API Token</p>
+            <div className="rounded-xl border border-[color:var(--border-subtle)] bg-[var(--surface-card-strong)] p-4">
+              <p className="mb-1 text-sm text-[color:var(--text-tertiary)]">Cloudflare API Token</p>
               <div className="flex items-center gap-2">
                 {config?.hasCfToken ? (
                   <Badge variant="success"><CheckCircle2 className="w-3 h-3 inline mr-1" />已配置</Badge>
@@ -1174,19 +1264,23 @@ const SettingsView = ({ config, onConfigChange }: { config: AppConfig | null, on
                 )}
               </div>
             </div>
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
-              <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">开放的域名 (ALLOWED_DOMAINS)</p>
+            <div className="rounded-xl border border-[color:var(--border-subtle)] bg-[var(--surface-card-strong)] p-4">
+              <p className="mb-1 text-sm text-[color:var(--text-tertiary)]">开放的域名 (ALLOWED_DOMAINS)</p>
               <div className="flex flex-wrap gap-2 mt-1">
                 {config?.allowedDomains && config.allowedDomains.length > 0 ? (
-                  config.allowedDomains.map(d => <Badge key={d} variant="default">{d}</Badge>)
+                  config.allowedDomains.map((d) => (
+                    <span key={d}>
+                      <Badge variant="default">{d}</Badge>
+                    </span>
+                  ))
                 ) : (
                   <Badge variant="warning">未配置多域名</Badge>
                 )}
               </div>
             </div>
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
-              <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">CF 默认代理状态</p>
-              <p className="text-slate-900 dark:text-white font-mono">{config?.cfProxied ? 'Proxied (云朵开启)' : 'DNS Only'}</p>
+            <div className="rounded-xl border border-[color:var(--border-subtle)] bg-[var(--surface-card-strong)] p-4">
+              <p className="mb-1 text-sm text-[color:var(--text-tertiary)]">CF 默认代理状态</p>
+              <p className="font-mono text-[color:var(--text-primary)]">{config?.cfProxied ? 'Proxied (云朵开启)' : 'DNS Only'}</p>
             </div>
           </div>
         </div>
@@ -1195,37 +1289,12 @@ const SettingsView = ({ config, onConfigChange }: { config: AppConfig | null, on
   );
 };
 
-// --- 主题管理 Hook (业界最佳实践) ---
-type Theme = 'dark' | 'light' | 'system';
-
-function useTheme() {
-  const [theme, setTheme] = useState<Theme>(() => {
-    return (localStorage.getItem('theme') as Theme) || 'system';
-  });
-
-  useEffect(() => {
-    const root = window.document.documentElement;
-    root.classList.remove('light', 'dark');
-
-    if (theme === 'system') {
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      root.classList.add(systemTheme);
-      return;
-    }
-
-    root.classList.add(theme);
-    localStorage.setItem('theme', theme);
-  }, [theme]);
-
-  return { theme, setTheme };
-}
-
 // --- 主应用组件 ---
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('monitor');
   const [config, setConfig] = useState<AppConfig | null>(null);
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, resolvedTheme } = useTheme();
   const [loggedIn, setLoggedIn] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [username, setUsername] = useState('');
@@ -1297,45 +1366,45 @@ export default function App() {
   };
 
   if (checkingAuth) {
-    return <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-[#0a0b10] text-slate-800 dark:text-slate-200"><RefreshCw className="w-8 h-8 animate-spin text-blue-500" /></div>;
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] text-[color:var(--text-primary)]">
+        <RefreshCw className="h-8 w-8 animate-spin text-[var(--brand-500)]" />
+      </div>
+    );
   }
 
   if (!loggedIn) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-[#0a0b10] text-slate-800 dark:text-slate-200 transition-colors duration-200">
-        <div className="w-full max-w-md p-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl">
+      <div className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] px-6 text-[color:var(--text-primary)] transition-colors duration-200">
+        <div className="w-full max-w-md rounded-[1.75rem] border border-[color:var(--border-subtle)] bg-[var(--surface-card)] p-8 shadow-[0_28px_60px_-40px_rgba(15,23,42,0.7)] backdrop-blur-xl">
           <div className="flex flex-col items-center mb-8">
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20 mb-4">
-              <ShieldCheck className="w-7 h-7 text-white" />
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/20">
+              <ShieldCheck className="h-7 w-7 text-white" />
             </div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Docker 代理平台</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">请输入管理员账号登录</p>
+            <h1 className="text-2xl font-bold text-[color:var(--text-primary)]">Docker 代理平台</h1>
+            <p className="mt-1 text-sm text-[color:var(--text-tertiary)]">请输入管理员账号登录</p>
           </div>
           <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">用户名</label>
-              <input 
-                type="text" 
+            <Field label="用户名">
+              <Input
+                type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
                 required
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">密码</label>
-              <input 
-                type="password" 
+            </Field>
+            <Field label="密码">
+              <Input
+                type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
                 required
               />
-            </div>
+            </Field>
             {loginError && <p className="text-sm text-rose-500">{loginError}</p>}
-            <button type="submit" className="w-full py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors">
+            <Button type="submit" className="w-full" size="lg">
               登录
-            </button>
+            </Button>
           </form>
         </div>
       </div>
@@ -1343,15 +1412,15 @@ export default function App() {
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50 dark:bg-[#0a0b10] text-slate-800 dark:text-slate-200 font-sans transition-colors duration-200">
+    <div className="flex min-h-screen bg-[var(--app-bg)] text-[color:var(--text-primary)] font-sans transition-colors duration-200">
       {/* 左侧侧边栏 */}
-      <aside className="w-72 border-r border-slate-200 dark:border-slate-800 flex flex-col bg-white/80 dark:bg-[#0a0b10]/80 backdrop-blur-xl sticky top-0 h-screen transition-colors duration-200">
+      <aside className="sticky top-0 flex h-screen w-72 flex-col border-r border-[color:var(--border-subtle)] bg-[var(--surface-card)] backdrop-blur-xl transition-colors duration-200">
         <div className="p-8">
           <div className="flex items-center gap-3 mb-10">
             <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
               <Activity className="w-6 h-6 text-white" />
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">DockerProxy</h1>
+            <h1 className="text-xl font-bold tracking-tight text-[color:var(--text-primary)]">DockerProxy</h1>
           </div>
 
           <nav className="space-y-2">
@@ -1401,21 +1470,12 @@ export default function App() {
         </div>
 
         {/* 底部设置与主题切换 */}
-        <div className="mt-auto p-8 border-t border-slate-200 dark:border-slate-800 space-y-2">
-          <button
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="flex items-center w-full gap-3 px-4 py-3 text-sm font-medium transition-all duration-200 rounded-lg text-slate-600 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
-          >
-            {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            {theme === 'dark' ? '切换至明亮模式' : '切换至暗黑模式'}
-          </button>
-          <button
-            onClick={handleLogout}
-            className="flex items-center w-full gap-3 px-4 py-3 text-sm font-medium transition-all duration-200 rounded-lg text-slate-600 hover:bg-rose-100 hover:text-rose-600 dark:text-slate-400 dark:hover:bg-rose-900/30 dark:hover:text-rose-400"
-          >
-            <ExternalLink className="w-5 h-5" />
+        <div className="mt-auto space-y-3 border-t border-[color:var(--border-subtle)] p-8">
+          <ThemeSwitch theme={theme} resolvedTheme={resolvedTheme} onChange={setTheme} />
+          <Button onClick={handleLogout} variant="ghost" className="w-full justify-start text-rose-500 hover:bg-rose-500/10 hover:text-rose-500">
+            <ExternalLink className="h-5 w-5" />
             退出登录
-          </button>
+          </Button>
           <SidebarItem 
             icon={Settings} 
             label="系统设置" 
@@ -1426,7 +1486,7 @@ export default function App() {
       </aside>
 
       {/* 右侧主内容区 */}
-      <main className="flex-1 p-10 overflow-auto">
+      <main className="flex-1 overflow-auto p-10">
         <div className="max-w-6xl mx-auto">
           <AnimatePresence mode="wait">
             <motion.div

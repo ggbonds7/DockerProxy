@@ -1,115 +1,263 @@
-# Docker Proxy Platform (Docker 可视化代理与管理平台)
+# Docker Proxy Platform
 
-一个现代化、功能强大的 Web 端 Docker 容器与反向代理管理平台。本项目旨在简化 VPS 上的服务部署、Nginx 路由转发、Cloudflare DNS 解析以及跨主机 Docker 迁移等日常运维工作。
+一个面向单机 VPS / Linux 宿主机的 Docker 可视化运维平台，提供主机监控、容器管理、Cloudflare DNS 管理、Nginx 路由转发、证书管理，以及服务级 Docker 迁移能力。
 
-## ✨ 核心特性
+当前前端已统一到 `React 19 + Vite 6 + Tailwind CSS 4.2`，重点页面采用统一的控制台组件和明暗主题。
 
-- 📊 **主机监控**: 实时监控宿主机的 CPU、内存、磁盘、网络流量与延迟等关键指标，并提供历史负载趋势图。
-- 🐳 **容器管理**: 实时监控容器状态，支持启动、停止、重启、删除操作，并可在线实时查看容器日志。
-- 🌐 **DNS 解析管理**: 深度集成 Cloudflare API，支持多域名的 DNS 记录可视化增删改查。
-- 🚀 **服务快速部署**: 输入镜像名即可自动生成符合最佳实践的 `docker-compose.yml`，自动接入 `proxy_net` 内部网络并一键拉起服务。
-- 🔀 **路由转发配置**: 可视化管理 Nginx 反向代理规则，轻松将域名映射到内部 Docker 容器。
-- 🔒 **SSL 证书管理**: 集中展示域名证书的有效期与状态，支持一键触发证书续签。
-- 🚚 **跨主机全量迁移**: 独创的 SSH 迁移功能，可将本机的 Docker 项目配置及数据一键全量打包并迁移至远程服务器，自动恢复服务。
-- ⚙️ **现代化系统管理**: 
-  - 内置 JWT 安全登录认证（默认密码可配）。
-  - 支持 Web 端实时编辑和重载 `.env` 环境变量。
-  - 优雅的明暗主题（Dark/Light Mode）无缝切换。
+## 适用场景
 
-## 🏗 架构与最佳实践
+- 在一台 Linux 主机上统一管理 Docker 容器、反向代理和 DNS
+- 快速生成并部署 `docker-compose.yml`
+- 查看宿主机资源，而不仅仅是容器内部指标
+- 将 Compose 项目或独立容器迁移到另一台机器，并保留计划、风险、日志、结果和目标机回滚能力
 
-本项目在部署 Docker 服务时，默认采用 **内部网络隔离（Internal Network Isolation）** 的最佳实践：
-- 所有由本平台部署的 Web 服务都会自动加入名为 `proxy_net` 的外部网络。
-- 容器仅通过 `expose` 暴露端口给内部网络，而**不使用** `ports` 映射到宿主机。
-- Nginx 代理容器同样加入 `proxy_net`，通过容器名（如 `http://container_name:80`）直接进行反向代理。
-- **优势**: 彻底杜绝了端口冲突，极大提升了宿主机的安全性，防止服务被外部恶意扫描。
+## 当前能力
 
-## 🛠 环境要求
+### 1. 主机监控
 
-- **Node.js**: v18.0 或更高版本
-- **Docker**: 20.10+ 及 Docker Compose v2
-- **操作系统**: Linux (推荐 Ubuntu/Debian/CentOS)
+- 展示 CPU、内存、磁盘、网络延迟和吞吐
+- 展示最近一段时间的 CPU / 内存趋势
+- 优先采集宿主机视角；如果宿主机 helper 不可用，会回退到当前运行环境视角并给出提示
 
-## 📦 安装与部署
+### 2. 容器管理
 
-本项目支持使用 Docker Compose 一键部署（推荐），或通过源码手动运行。
+- 自动区分 `Compose 项目` 和 `独立容器`
+- Compose 容器按项目折叠展示，独立容器单独展示
+- 支持搜索、状态筛选、分页
+- 支持启动、停止、重启、删除、查看日志
 
-### 方式一：Docker Compose 部署（推荐）
+### 3. DNS 代理模块
 
-1. **克隆项目**
+- 对接 Cloudflare DNS 记录
+- 支持域名切换、记录增删改查
+- 支持按名称/内容/类型/代理状态筛选
+- 支持分页
+- 如果 Token 没有全局 `Zone:Read` 权限，会自动进入 fallback 模式，并结合 `ALLOWED_DOMAINS + CF_ZONE_ID` 兜底
+
+### 4. 服务快速部署
+
+- 根据镜像名、服务名、端口等参数生成 Compose 模板
+- 提供在线编辑器，便于手工调整后部署
+
+### 5. 路由转发与证书
+
+- 管理反向代理规则
+- 管理证书状态与续签动作
+
+### 6. Docker 服务级迁移
+
+- 支持两类来源：
+  - `Compose 项目`：按整个项目整组迁移
+  - `独立容器`：按单容器迁移
+- 支持迁移计划、影响面、风险与阻断项审查
+- 支持执行进度、服务矩阵、传输进度、命令日志
+- 支持结果查看、导出报告、目标机回滚
+
+## 迁移设计原则
+
+当前迁移页面遵循以下原则：
+
+- 以 `Compose 项目` 或 `独立容器` 为迁移来源，而不是整机全量迁移
+- 默认隔离 staging，不直接覆盖目标机现有内容
+- 发现冲突即阻断，不隐式替换目标机容器、卷、网络、目录或端口
+- 失败只回滚本次迁移触达的目标资源，不反向操作源机器
+
+迁移流程是固定的四步：
+
+1. 选择来源和目标主机
+2. 审查计划、风险和阻断项
+3. 执行迁移并观察实时日志
+4. 查看结果、导出报告或回滚
+
+这比直接暴露一组操作按钮更适合实际使用，能明显降低误操作概率。
+
+## 技术栈
+
+- 前端：React 19、Vite 6、Tailwind CSS 4.2、lucide-react、motion、recharts
+- 后端：Express、Dockerode、node-ssh、jsonwebtoken
+- 运行方式：同一个 Node 进程同时提供 API 和前端静态资源
+
+## 环境要求
+
+- Node.js 18+
+- Docker 20.10+
+- Docker Compose v2
+- Linux 宿主机
+
+如果要使用本平台部署和代理服务，建议预先创建外部网络：
+
 ```bash
-git clone https://github.com/yourusername/docker-proxy-platform.git
-cd docker-proxy-platform
+docker network create proxy_net || true
 ```
 
-2. **配置环境变量**
+## 快速开始
+
+### 方式一：Docker Compose 运行
+
+1. 克隆仓库
+
 ```bash
-cp .env.example .env
-# 根据需要修改 .env 文件中的配置
+git clone <your-repo-url>
+cd DockerProxy
 ```
 
-3. **一键启动**
-```bash
-docker compose up -d
-```
-服务将自动构建并运行在 `http://localhost:3000`。
+2. 准备 `.env`
 
-### 方式二：源码手动部署
+如果你没有现成配置，可以直接新建 `.env`：
 
-1. **克隆项目**
 ```bash
-git clone https://github.com/yourusername/docker-proxy-platform.git
-cd docker-proxy-platform
+touch .env
 ```
 
-2. **安装依赖**
+至少建议填写这些变量：
+
+```env
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=123456
+JWT_SECRET=change-me
+NGINX_CONTAINER_NAME=nginx-gateway
+CERT_AGENT_CONTAINER_NAME=cert-agent
+VPS_PUBLIC_IP=
+CF_API_TOKEN=
+CF_ZONE_ID=
+CF_PROXIED=true
+CF_TTL=1
+ALLOWED_DOMAINS=example.com
+```
+
+说明：
+
+- 仓库里的 `.env.example` 目前还保留了一些 AI Studio 注释；部署本项目时以上面的实际变量为准。
+- 如果不使用 Cloudflare，可暂时留空 `CF_*` 相关配置。
+
+3. 启动
+
+```bash
+docker compose up -d --build
+```
+
+默认访问地址：
+
+```text
+http://localhost:3000
+```
+
+当前 `docker-compose.yml` 会挂载：
+
+- `/var/run/docker.sock`：用于管理宿主机 Docker
+- `./data`：用于持久化平台数据
+- `./.env`：用于系统设置读写
+
+### 方式二：源码运行
+
+1. 安装依赖
+
 ```bash
 npm install
 ```
 
-3. **环境配置**
-复制环境变量示例文件并进行修改：
+2. 准备 `.env`
+
 ```bash
-cp .env.example .env
+touch .env
 ```
-*提示：你也可以在启动后，直接通过 Web 界面的“系统设置”在线修改这些配置。*
 
-4. **启动服务**
+3. 开发模式
 
-**开发模式:**
 ```bash
 npm run dev
 ```
 
-**生产模式:**
+4. 生产模式
+
 ```bash
 npm run build
-npm start
+NODE_ENV=production npm run start
 ```
-服务默认运行在 `http://localhost:3000`。
 
-## 📝 环境变量说明
+说明：
 
-| 变量名 | 描述 | 默认值 |
-| --- | --- | --- |
-| `ADMIN_USERNAME` | Web 控制台登录用户名 | `admin` |
-| `ADMIN_PASSWORD` | Web 控制台登录密码 | `123456` |
-| `JWT_SECRET` | JWT 签发密钥，请务必修改为随机字符串 | `your-secret-key-change-me` |
-| `NGINX_CONTAINER_NAME` | Nginx 代理容器的名称 | `nginx-gateway` |
-| `CERT_AGENT_CONTAINER_NAME`| 证书管理容器的名称 | `cert-agent` |
-| `VPS_PUBLIC_IP` | 当前 VPS 的公网 IP 地址 | `空` |
-| `CF_API_TOKEN` | Cloudflare API Token（需具备 DNS 编辑权限） | `空` |
-| `CF_ZONE_ID` | Cloudflare 域名的 Zone ID | `空` |
-| `CF_PROXIED` | 添加 DNS 记录时是否默认开启 CF 代理 (小黄云) | `true` |
-| `CF_TTL` | DNS 记录的 TTL 值 | `1` (自动) |
-| `ALLOWED_DOMAINS` | 允许管理的域名列表，英文逗号分隔 | `example.com,test.com` |
+- `npm run build` 只构建前端静态资源
+- `npm run start` 仍然通过 `tsx server.ts` 启动 Node 服务
+- 当前服务端口固定为 `3000`
 
-## 🔐 安全建议
+## 常用脚本
 
-1. 首次部署后，请立即登录系统并修改默认的 `ADMIN_USERNAME` 和 `ADMIN_PASSWORD`。
-2. 确保 `JWT_SECRET` 被修改为强随机字符串。
-3. 建议将本平台本身也置于 Nginx 反向代理之后，并配置 SSL/TLS 证书以启用 HTTPS 访问。
+```bash
+npm run dev
+npm run build
+npm run start
+npm run lint
+```
 
-## 📄 开源协议
+## 目录说明
 
-本项目基于 [MIT License](LICENSE) 开源。
+```text
+src/                    前端页面与组件
+src/components/ui/      共享 UI primitives
+server/routes/          API 路由
+server/services/        Docker / DNS / 迁移 / 监控等服务逻辑
+data/                   平台运行数据、项目配置、迁移快照等
+```
+
+## 页面说明
+
+### 主机监控
+
+- 查看宿主机资源和历史趋势
+- 若采集不到宿主机，会显示回退告警
+
+### 容器管理
+
+- Compose 项目折叠展示
+- 独立容器直接展示
+- 支持日志查看和常用生命周期操作
+
+### DNS 代理模块
+
+- 先切换域名，再查看和编辑记录
+- 适合多域名场景
+
+### Docker 服务级迁移控制台
+
+推荐使用顺序：
+
+1. 在“选择来源”中选择 Compose 项目或独立容器
+2. 填写目标主机 SSH
+3. 点击“生成计划”
+4. 在“审查计划”中确认影响范围和风险
+5. 点击“开始迁移”
+6. 在“执行监控”中查看阶段时间线、传输进度和日志
+7. 在“结果与回滚”中确认结果，必要时导出报告或回滚
+
+### 系统设置
+
+- 在线查看和编辑 `.env`
+- 查看当前系统加载配置
+- 支持明暗主题切换
+
+## 安全建议
+
+1. 立即修改默认账号密码和 `JWT_SECRET`
+2. 不要把平台直接暴露在公网裸奔，建议置于 HTTPS 反代之后
+3. 给 Cloudflare Token 最小必要权限
+4. 迁移前先确认目标机磁盘空间、Docker / Compose 可用性和 SSH 权限
+
+## 当前限制
+
+- 当前未内置自动化测试脚本
+- 构建可通过，但前端主包仍偏大，后续建议做页面级拆包
+- 迁移控制台目前更适合单主机到单主机的迁移场景，不适合双写、跨区域实时复制等复杂拓扑
+
+## 验证命令
+
+在当前仓库下可使用：
+
+```bash
+npm run lint
+npm run build
+```
+
+## License
+
+[MIT](./LICENSE)

@@ -12,6 +12,9 @@ export async function getContainers() {
     state: c.State,
     status: c.Status,
     ports: c.Ports.map(p => `${p.PublicPort || ''}:${p.PrivatePort}/${p.Type}`).filter(p => !p.startsWith(':')),
+    sourceKind: c.Labels?.["com.docker.compose.project"] ? 'compose-project' : 'standalone-container',
+    composeProject: c.Labels?.["com.docker.compose.project"] || undefined,
+    composeService: c.Labels?.["com.docker.compose.service"] || undefined,
   }));
 }
 
