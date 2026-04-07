@@ -1,90 +1,48 @@
-@import "tailwindcss";
+﻿@import "tailwindcss";
 
-/* Tailwind v4 业界最佳实践：使用 @custom-variant 开启基于 class 的暗黑模式 */
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-sans: "Inter", "SF Pro Display", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-sans: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", monospace;
 }
 
-:root {
-  --app-bg: #f4f7fb;
-  --app-bg-accent: rgba(37, 99, 235, 0.14);
-  --surface-card: rgba(255, 255, 255, 0.84);
-  --surface-card-strong: rgba(255, 255, 255, 0.96);
-  --surface-soft: #eef4ff;
-  --surface-subtle: #f8fafc;
-  --border-subtle: rgba(148, 163, 184, 0.22);
-  --border-strong: rgba(100, 116, 139, 0.38);
-  --text-primary: #0f172a;
-  --text-secondary: #334155;
-  --text-tertiary: #64748b;
-  --brand-500: #2563eb;
-  --brand-600: #1d4ed8;
-  --brand-soft: rgba(37, 99, 235, 0.16);
-  --scrollbar-thumb: rgba(148, 163, 184, 0.72);
-  --scrollbar-thumb-hover: rgba(100, 116, 139, 0.82);
-  --console-bg: #0f172a;
-  --console-border: rgba(15, 23, 42, 0.82);
-  --console-text: #e2e8f0;
-  --console-muted: #94a3b8;
-}
-
-.dark {
-  --app-bg: #060a17;
-  --app-bg-accent: rgba(96, 165, 250, 0.16);
-  --surface-card: rgba(15, 23, 42, 0.76);
-  --surface-card-strong: rgba(15, 23, 42, 0.92);
-  --surface-soft: rgba(30, 41, 59, 0.78);
-  --surface-subtle: rgba(15, 23, 42, 0.92);
-  --border-subtle: rgba(71, 85, 105, 0.54);
-  --border-strong: rgba(100, 116, 139, 0.8);
-  --text-primary: #e2e8f0;
-  --text-secondary: #cbd5e1;
-  --text-tertiary: #94a3b8;
-  --brand-500: #60a5fa;
-  --brand-600: #3b82f6;
-  --brand-soft: rgba(96, 165, 250, 0.18);
-  --scrollbar-thumb: rgba(51, 65, 85, 0.9);
-  --scrollbar-thumb-hover: rgba(71, 85, 105, 0.96);
-  --console-bg: rgba(2, 6, 23, 0.92);
-  --console-border: rgba(30, 41, 59, 0.92);
-  --console-text: #dbe4f0;
-  --console-muted: #7f8ea3;
-}
-
-html {
-  background: var(--app-bg);
+html,
+body,
+#root {
+  min-height: 100%;
 }
 
 body {
-  min-height: 100vh;
+  margin: 0;
+  font-family: var(--font-sans);
   background:
-    radial-gradient(circle at top left, var(--app-bg-accent), transparent 28%),
-    radial-gradient(circle at top right, rgba(16, 185, 129, 0.08), transparent 20%),
-    var(--app-bg);
-  color: var(--text-primary);
+    radial-gradient(circle at top left, rgba(22, 119, 255, 0.12), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(34, 197, 94, 0.08), transparent 22%),
+    #f5f7fb;
 }
 
-::selection {
-  background: rgba(37, 99, 235, 0.2);
+.dark body {
+  background:
+    radial-gradient(circle at top left, rgba(22, 119, 255, 0.18), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(34, 197, 94, 0.08), transparent 22%),
+    #030712;
 }
 
-/* 自定义滚动条 */
+* {
+  box-sizing: border-box;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
-}
-
-::-webkit-scrollbar-track {
-  @apply bg-transparent;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 9999px;
+  background: rgba(100, 116, 139, 0.56);
+  border-radius: 999px;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb-hover);
+::-webkit-scrollbar-track {
+  background: transparent;
 }

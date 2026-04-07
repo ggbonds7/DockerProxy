@@ -12,6 +12,8 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@ant-design/icons": "^6.1.1",
+    "@ant-design/pro-components": "^2.8.10",
     "@google/genai": "^1.29.0",
     "@tailwindcss/vite": "^4.2.2",
     "@types/cors": "^2.8.19",
@@ -19,6 +21,7 @@
     "@types/js-yaml": "^4.0.9",
     "@types/morgan": "^1.9.10",
     "@vitejs/plugin-react": "^5.0.4",
+    "antd": "^5.29.3",
     "axios": "^1.14.0",
     "better-sqlite3": "^12.8.0",
     "clsx": "^2.1.1",

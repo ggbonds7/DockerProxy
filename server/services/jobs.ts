@@ -1,6 +1,6 @@
-import crypto from "crypto";
+﻿import crypto from "crypto";
 import { getDb } from "../db";
-import { listMigrationSessions } from "./migration";
+import { listMigrationSessions } from "./migration/index";
 
 type JobStatus = "pending" | "running" | "completed" | "failed" | "rolled_back" | "blocked";
 

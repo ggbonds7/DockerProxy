@@ -1,0 +1,200 @@
+﻿# Iteration Log
+
+## 2026-04-06
+- Scope: migration project discovery, Gcore DNS record handling, server overview detail loading, global project rules.
+- Decisions:
+  - Migration discovery is runtime-first (`docker compose ls`) with filesystem scan as a non-blocking fallback.
+  - Missing environment workdirs must not fail migration project discovery.
+  - Server overview must load full metrics, channels, and tasks only for the selected server.
+  - DNS record fetches must use stable request sequencing on the frontend and normalized zone resolution on the backend.
+  - Project-level engineering rules are now stored in `docs/project-prompt.md`.
+- Files touched:
+  - `server/services/migration/discovery.ts`
+  - `server/services/providers.ts`
+  - `server/services/servers.ts`
+  - `src/contexts/AppDataContext.tsx`
+  - `src/pages/infrastructure/ServerOverviewPage.tsx`
+  - `src/components/common/ServerContextCard.tsx`
+  - `src/pages/network/DnsRecordsPage.tsx`
+  - `src/pages/operations/MigrationConsolePage.tsx`
+  - `docs/project-prompt.md`
+  - `docs/iteration-log.md`
+- Validation:
+  - `npm run lint` passed on 2026-04-06.
+  - `npm run build` passed on 2026-04-06.
+- Open risks:
+  - `src/pages/operations/MigrationConsolePage.tsx` still contains older non-ASCII labels outside the latest cleaned section and should be normalized further.
+  - Gcore record APIs need a live smoke test against a real connection after the backend fallback changes.
+- Next steps:
+  - Finish normalizing migration console labels and prompts.
+  - Run `npm run lint` and fix any remaining type errors.
+  - Smoke-test migration discovery and Gcore record loading against live data.
+
+## 2026-04-06 (follow-up)
+- Scope: DNS delete confirmation, gateway Nginx import workflow, migration project discovery metadata and manual inspect flow.
+- Decisions:
+  - DNS delete confirmation now uses Ant Design App modal context, not static `Modal.confirm`.
+  - Gateway routes remain DB-authoritative; Nginx config is importable runtime state, not the primary model.
+  - Migration project discovery now returns discovery metadata and supports manual Compose path inspection.
+  - `platform workdir` remains the platform working root for deploy and migration artifacts, not a Docker visibility boundary.
+- Files touched:
+  - `server/db/index.ts`
+  - `server/routes/gateways.ts`
+  - `server/routes/migrate.ts`
+  - `server/routes/proxy.ts`
+  - `server/services/gateways.ts`
+  - `server/services/nginx.ts`
+  - `server/services/migration/discovery.ts`
+  - `server/services/migration/index.ts`
+  - `server/services/migration/types.ts`
+  - `src/pages/network/DnsRecordsPage.tsx`
+  - `src/pages/network/GatewayRoutesPage.tsx`
+  - `src/pages/operations/MigrationConsolePage.tsx`
+  - `src/types.ts`
+  - `docs/iteration-log.md`
+- Validation:
+  - `npm run lint` passed on 2026-04-06.
+  - `npm run build` passed on 2026-04-06.
+- Open risks:
+  - Gateway Nginx import currently only supports simple `server_name + proxy_pass` reverse-proxy configs by design.
+  - Gcore delete and gateway import still need a live smoke test against real remote services.
+- Next steps:
+  - Smoke-test DNS single delete and bulk delete against Cloudflare and Gcore.
+  - Verify gateway import on one local and one remote Nginx environment.
+  - Verify migration manual inspect flow on a source host whose Compose projects live outside `workdir`.
+
+## 2026-04-06 (Gcore DNS pagination)
+- Scope: Gcore DNS record pagination, initial load 404 handling, DNS records page request ordering.
+- Decisions:
+  - DNS records page continues to use Ant Design `Table` pagination on the frontend.
+  - Gcore record listing must fetch all rrset pages from the provider API before handing data to the frontend table.
+  - Zone-bound record loading must wait until the selected connection owns the currently loaded zone list, so stale connection/zone combinations do not trigger false 404 notifications.
+- Files touched:
+  - `server/services/providers.ts`
+  - `src/pages/network/DnsRecordsPage.tsx`
+  - `docs/iteration-log.md`
+- Validation:
+  - `npm run lint` passed on 2026-04-06.
+  - `npm run build` passed on 2026-04-06.
+- Open risks:
+  - Gcore live environments still need a smoke test to confirm the provider returns `total_amount` consistently across all zones.
+  - `server/services/providers.ts` still contains older mojibake strings outside the Gcore pagination path and should be normalized in a separate cleanup pass.
+- Next steps:
+  - Smoke-test one large Gcore zone and verify table total, page changes, and page-size changes all reflect the full record set.
+  - Normalize remaining legacy non-ASCII error strings in `server/services/providers.ts`.
+
+## 2026-04-06 (gateway discovery)
+- Scope: gateway route discovery model, command-based Nginx inspection, directory-role clarification.
+- Decisions:
+  - Gateway route discovery now uses `nginx -T` as the primary runtime inspection path.
+  - `configDir` remains only as the managed output directory for platform-written Nginx config files and as a fallback discovery source when `nginx -T` is unavailable.
+  - `platform workdir` remains a controlled landing zone for deploy and migration artifacts, not a query boundary for Docker or Nginx runtime inspection.
+- Files touched:
+  - `server/services/nginx.ts`
+  - `docs/iteration-log.md`
+- Validation:
+  - `npm run lint` passed on 2026-04-06.
+  - `npm run build` passed on 2026-04-06.
+- Open risks:
+  - `nginx -T` output shape can vary across custom distributions; simple reverse-proxy import is still intentionally limited to single `server_name` + single `proxy_pass`.
+  - The current local-gateway runtime inspection assumes the configured Nginx container is reachable and exposes `nginx` inside the container.
+- Next steps:
+  - Smoke-test one local and one remote gateway using `sync-nginx`.
+  - Normalize remaining legacy mojibake strings in older backend service files.
+
+## 2026-04-06 (gateway docker fallback)
+- Scope: remote dockerized Nginx discovery and reload fallback.
+- Decisions:
+  - Remote gateway inspection now supports both host-installed Nginx and dockerized Nginx.
+  - Discovery order for remote gateways is `host nginx -T` first, then `docker ps` + `docker exec <container> nginx -T`.
+  - Remote reload follows the same fallback model; platform-managed config writes still assume the target config is host-accessible or bind-mounted from the host.
+- Files touched:
+  - `server/services/nginx.ts`
+  - `server/services/gateways.ts`
+  - `docs/iteration-log.md`
+- Validation:
+  - `npm run lint` passed on 2026-04-06.
+  - `npm run build` passed on 2026-04-06.
+- Open risks:
+  - Remote dockerized gateways that keep config only inside the container filesystem are discoverable, but not suitable for stable platform-managed writes unless config is bind-mounted to a host path.
+  - Auto-detection uses running container names/images containing `nginx`; unusual custom images may still require explicit container metadata later.
+- Next steps:
+  - Smoke-test one remote host with host-installed Nginx and one remote host with dockerized Nginx.
+  - Add an explicit gateway metadata editor if per-gateway container names need to be overridden in the UI.
+
+## 2026-04-06 (nginx parse-render module)
+- Scope: shared Nginx parse/render module, multi-server-block import support, runtime-aware route delivery.
+- Decisions:
+  - Nginx route import and route generation are now handled by a shared module instead of ad hoc regex embedded in gateway orchestration.
+  - Import supports common enterprise layouts where a single `.conf` contains multiple `server` blocks for the same domain, such as `80 redirect + 443 proxy`.
+  - Managed route delivery distinguishes between host-installed Nginx and dockerized Nginx; remote dockerized gateways can now receive config files inside the container when host-path delivery is not available.
+- Files touched:
+  - `server/services/nginx-config.ts`
+  - `server/services/nginx.ts`
+  - `docs/iteration-log.md`
+- Validation:
+  - `npm run lint` passed on 2026-04-06.
+  - `npm run build` passed on 2026-04-06.
+- Open risks:
+  - The parser intentionally targets common reverse-proxy patterns and still does not attempt to model arbitrary advanced Nginx configurations.
+  - SSL render output assumes certificate files live under `/etc/nginx/certs/<domain>/`; that path should be aligned with the real cert delivery flow in a later pass.
+- Next steps:
+  - Smoke-test import on one config file with `80 -> 443 redirect` and one `443 proxy` block.
+  - Align certificate issuance/storage flow with the rendered SSL route template.
+
+## 2026-04-06 (nginx variable proxy + real delete path)
+- Scope: Nginx variable-based proxy target parsing, imported-route deletion correctness.
+- Decisions:
+  - The parser now supports common `set $var ...` plus `proxy_pass http://$var` patterns when the variable resolves to a literal value inside the same server block.
+  - Imported and managed routes now persist the actual source config path so delete operations target the real Nginx config file instead of guessing a filename from the domain.
+  - Unresolved `proxy_pass` variables are treated as unmanaged rather than being imported as invalid targets.
+- Files touched:
+  - `server/services/nginx-config.ts`
+  - `server/services/nginx.ts`
+  - `server/db/index.ts`
+  - `docs/iteration-log.md`
+- Validation:
+  - `npm run lint` passed on 2026-04-06.
+  - `npm run build` passed on 2026-04-06.
+- Open risks:
+  - Variable support currently targets `set $name literal; proxy_pass ...$name...` patterns and does not attempt to resolve complex `map`, `include`, or runtime-computed values.
+  - Existing imported routes already stored in the database before this migration may not yet have `source_conf_path`; those legacy rows still rely on derived fallback paths until re-synced.
+- Next steps:
+  - Re-run Nginx import for existing gateways so legacy imported rows get real `source_conf_path`.
+  - Add UI surfacing for `sourceConfPath` in route details when debugging imported routes.
+
+## 2026-04-06 (nginx import updates existing imported routes)
+- Scope: gateway Nginx initialization sync behavior for existing routes.
+- Decisions:
+  - Re-syncing an existing `nginx-import` route now updates the stored route from the latest Nginx runtime config instead of skipping it.
+  - Existing `managed` routes remain authoritative and are never auto-overwritten by Nginx import; conflicts are still reported as skipped.
+  - Gateway sync results now distinguish `imported`, `updated`, `skipped`, and `unmanaged` so the UI can report actual sync outcomes.
+- Files touched:
+  - `server/services/nginx.ts`
+  - `src/pages/network/GatewayRoutesPage.tsx`
+  - `src/types.ts`
+  - `docs/iteration-log.md`
+- Validation:
+  - `npm run lint` passed on 2026-04-06.
+- Open risks:
+  - Existing managed routes that intentionally shadow runtime Nginx config still require explicit user action to reconcile.
+  - Live smoke testing is still needed against a real gateway to confirm update counts and route path persistence match runtime behavior.
+- Next steps:
+  - Run a live `sync-nginx` against a gateway with pre-existing imported routes and verify rows are updated in place.
+  - Confirm delete continues to remove the real config path after an update-in-place sync.
+
+## 2026-04-06 (enterprise remediation plan archive)
+- Scope: archive the enterprise control plane remediation plan as a root-level planning document.
+- Decisions:
+  - The enterprise remediation plan is stored in the repository root as a standalone archival document.
+  - The archived document preserves the previously approved plan body verbatim and adds only planning metadata plus a planning-only disclaimer.
+  - The archive document is explicitly not an implementation record or completion signal.
+- Files touched:
+  - `ENTERPRISE_CONTROL_PLANE_REMEDIATION_PLAN.md`
+  - `docs/iteration-log.md`
+- Validation:
+  - Root-level remediation plan document created on 2026-04-06.
+- Open risks:
+  - The archived plan is intentionally broader than the current implementation state and must not be interpreted as completed work.
+- Next steps:
+  - Use the archived plan as the baseline when future implementation tasks are split into executable iterations.

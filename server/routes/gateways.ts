@@ -1,5 +1,5 @@
-import { Router } from "express";
-import { getGatewayCertificates, listGateways } from "../services/gateways";
+﻿import { Router } from "express";
+import { getGatewayCertificates, listGateways, syncGatewayRoutes } from "../services/gateways";
 
 const router = Router();
 
@@ -9,6 +9,15 @@ router.get("/", (req, res) => {
     res.json(listGateways(serverId));
   } catch (error: any) {
     res.status(500).json({ error: "获取网关列表失败", details: error.message });
+  }
+});
+
+router.post("/:id/sync-nginx", async (req, res) => {
+  try {
+    const result = await syncGatewayRoutes(req.params.id);
+    res.json(result);
+  } catch (error: any) {
+    res.status(400).json({ error: "同步网关 Nginx 配置失败", details: error.message });
   }
 });
 

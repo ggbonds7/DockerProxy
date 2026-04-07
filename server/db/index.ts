@@ -131,10 +131,15 @@ function createTables(db: Database.Database) {
 
     CREATE TABLE IF NOT EXISTS proxy_routes (
       id TEXT PRIMARY KEY,
+      gateway_id TEXT REFERENCES gateways(id) ON DELETE SET NULL,
       environment_id TEXT REFERENCES environments(id) ON DELETE SET NULL,
       domain TEXT NOT NULL,
       target TEXT NOT NULL,
       ssl INTEGER NOT NULL DEFAULT 1,
+      source TEXT NOT NULL DEFAULT 'managed',
+      managed_state TEXT NOT NULL DEFAULT 'managed',
+      source_conf_path TEXT,
+      last_synced_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );

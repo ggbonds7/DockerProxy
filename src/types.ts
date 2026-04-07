@@ -1,3 +1,5 @@
+﻿import type { ReactNode } from 'react';
+
 export interface ContainerInfo {
   id: string;
   name: string;
@@ -17,6 +19,10 @@ export interface ProxyRoute {
   domain: string;
   target: string;
   ssl: boolean;
+  source: 'managed' | 'nginx-import';
+  managedState: 'managed' | 'unmanaged' | 'imported';
+  sourceConfPath?: string | null;
+  lastSyncedAt?: string | null;
   createdAt: string;
   updatedAt?: string;
 }
@@ -36,21 +42,35 @@ export interface DNSProviderConnection {
   provider: 'cloudflare' | 'gcore';
   displayName: string;
   status: string;
-  managedBy: 'database' | 'env' | string;
+  managedBy: 'database' | string;
   lastVerifiedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  zoneCount?: number | null;
+  lastError?: string | null;
+  settings: {
+    managedZones: string[];
+    defaultTtl: number | null;
+    defaultProxied?: boolean | null;
+  };
   capabilities: {
     supportsProxyStatus: boolean;
     recordTypes: string[];
   };
 }
 
+export interface DNSProviderAuthField {
+  key: 'apiToken' | 'apiKey';
+  label: string;
+  placeholder: string;
+  secret: boolean;
+}
+
 export interface DNSProviderCatalogItem {
   key: 'cloudflare' | 'gcore';
   name: string;
   supportsProxyStatus: boolean;
-  secretLabel: string;
+  authFields: DNSProviderAuthField[];
   description: string;
 }
 
@@ -71,6 +91,7 @@ export interface DNSProviderRecord {
   ttl: number;
   proxied?: boolean;
   editable: boolean;
+  deletable?: boolean;
   readOnlyReason?: string;
   meta?: Record<string, unknown>;
 }
@@ -117,11 +138,6 @@ export interface AppConfig {
   hasAppMasterKey: boolean;
   environmentCount: number;
   providerConnectionCount?: number;
-  hasCfToken: boolean;
-  hasCfZone: boolean;
-  cfProxied: boolean;
-  cfTtl: number;
-  allowedDomains: string[];
 }
 
 export interface Certificate {
@@ -178,6 +194,23 @@ export interface GatewaySummary {
   };
 }
 
+export interface GatewaySyncRouteItem {
+  confPath: string;
+  domain?: string;
+  target?: string;
+  ssl?: boolean;
+  reason: string;
+}
+
+export interface GatewaySyncResult {
+  gatewayId: string;
+  imported: ProxyRoute[];
+  updated: ProxyRoute[];
+  skipped: GatewaySyncRouteItem[];
+  unmanaged: GatewaySyncRouteItem[];
+  warnings: string[];
+}
+
 export interface JobSummary {
   id: string;
   kind: string;
@@ -193,6 +226,7 @@ export interface JobSummary {
 export interface ServerSummary extends EnvironmentSummary {
   serverId: string;
   serverType: 'local-host' | 'manual-ssh' | 'provider-imported' | string;
+  summaryMode?: 'lite' | 'full';
   metrics: {
     cpu: number;
     memoryPercent: number;
@@ -221,70 +255,120 @@ export interface ServerSummary extends EnvironmentSummary {
   lastHeartbeatAt: string | null;
 }
 
+export interface MonitorSnapshot {
+  scope: 'host' | 'runtime';
+  collector: 'docker-host-helper' | 'systeminformation' | 'ssh-procfs';
+  warning?: string;
+  cpu: {
+    manufacturer: string;
+    brand: string;
+    cores: number;
+    load: number;
+  };
+  memory: {
+    total: number;
+    used: number;
+    free: number;
+  };
+  os: {
+    platform: string;
+    distro: string;
+    release: string;
+    uptime: number;
+  };
+  disk: Array<{
+    fs: string;
+    size: number;
+    used: number;
+    use: number;
+    mount: string;
+  }>;
+  network: {
+    latency: number;
+    rx_sec: number;
+    tx_sec: number;
+  };
+}
+
 export interface MigrationProject {
   name: string;
   path: string;
   composePath: string;
+  composeFiles: string[];
+  discoverySource: 'managed' | 'filesystem';
   services: string[];
-  sourceType?: 'runtime-compose' | 'managed-project' | 'runtime-container';
-  sourceKind?: 'compose-project' | 'standalone-container';
-  selectionMode?: 'whole-project' | 'single-service';
-  planningMode?: 'compose-file' | 'runtime-snapshot';
-  description?: string;
-  runningContainerCount?: number;
-  warning?: string;
+  warnings: string[];
 }
 
-export interface MigrationBoundaryItem {
-  kind: string;
-  label: string;
-  detail: string;
+export interface MigrationProjectDiscoveryMeta {
+  runtimeTried: boolean;
+  runtimeFound: number;
+  workdir: string;
+  workdirExists: boolean;
+  fallbackScanned: boolean;
+  warnings: string[];
 }
 
-export interface MigrationResourceImpact {
-  kind: string;
-  label: string;
-  classification: 'read-only inspect' | 'new staging resource' | 'needs cutover' | 'blocked';
-  detail: string;
+export interface MigrationProjectListResponse {
+  projects: MigrationProject[];
+  discoveryMeta: MigrationProjectDiscoveryMeta;
 }
 
 export interface MigrationRisk {
   id: string;
   level: 'low' | 'medium' | 'high';
   title: string;
-  category: string;
-  scope: string;
   reason: string;
-  blocking: boolean;
   recommendation: string;
-}
-
-export interface MigrationConflictItem {
-  id: string;
-  kind: string;
-  target: string;
-  reason: string;
   blocking: boolean;
-  recommendation: string;
 }
 
 export interface MigrationServiceInfo {
   name: string;
   image?: string;
-  hasPorts: boolean;
+  hasBuild: boolean;
   ports: number[];
   envFiles: string[];
   externalNetworks: string[];
-  internalNetworks: string[];
   namedVolumes: string[];
   bindMounts: string[];
 }
 
-export interface MigrationRuntimeDrift {
+export interface MigrationProjectFileSummary {
+  projectDir: string;
+  composePath: string;
+  envFiles: string[];
+  estimatedBytes: number | null;
+}
+
+export interface MigrationExternalBindMount {
+  path: string;
+  bytes: number | null;
+  serviceNames: string[];
+  requiresApproval: boolean;
+  approved: boolean;
+  reason?: string;
+}
+
+export interface MigrationNamedVolume {
+  name: string;
+  bytes: number | null;
+  serviceNames: string[];
+}
+
+export interface MigrationImageTransfer {
   service: string;
-  running: boolean;
-  containerNames: string[];
-  notes: string[];
+  image: string;
+  strategy: 'pull' | 'save_load';
+  reason: string;
+  pullable: boolean;
+}
+
+export interface MigrationUnsupportedItem {
+  kind: string;
+  label: string;
+  reason: string;
+  blocking: boolean;
 }
 
 export interface MigrationPlan {
@@ -292,56 +376,46 @@ export interface MigrationPlan {
   projectName: string;
   projectPath: string;
   composePath: string;
-  rootService: string;
-  dependencyServices: string[];
-  selectedServices: string[];
+  composeFiles: string[];
+  sourceEnvironmentId: string;
+  targetEnvironmentId: string;
+  sourceDiscovery: 'managed' | 'filesystem';
   services: MigrationServiceInfo[];
-  readOnlyInspect: MigrationResourceImpact[];
-  stagingResources: MigrationResourceImpact[];
-  needsCutover: MigrationResourceImpact[];
-  blockedResources: MigrationResourceImpact[];
-  notTouched: MigrationBoundaryItem[];
-  safetyBoundary: {
-    immutableTargets: MigrationBoundaryItem[];
-    permissions: MigrationBoundaryItem[];
-  };
+  projectFiles: MigrationProjectFileSummary;
+  externalBindMounts: MigrationExternalBindMount[];
+  namedVolumes: MigrationNamedVolume[];
+  imageTransfers: MigrationImageTransfer[];
+  unsupportedItems: MigrationUnsupportedItem[];
   risks: MigrationRisk[];
-  conflicts: MigrationConflictItem[];
   target: {
     host: string;
     port: number;
-    username: string;
+    username: string | null;
     workdir: string;
+    projectDir: string;
+    composePath: string;
   };
-  artifactPaths: {
-    manifest: string;
-    riskReport: string;
-    stagingCompose: string;
-    cutoverCompose: string;
+  diskRequirements: {
+    sourceBytes: number | null;
+    targetBytes: number | null;
+    localSpoolBytes: number | null;
+    unknownBytes: boolean;
   };
-  runtimeDrift: MigrationRuntimeDrift[];
-  transferEstimate: {
-    totalBytes: number;
-    knownVolumeBytes: number;
-    projectBytes: number;
-    unknownVolumeSize: boolean;
+  cutoverEstimate: {
+    requiresDowntime: boolean;
+    summary: string;
   };
   preflight: {
-    dockerVersion?: string;
-    composeVersion?: string;
-    architecture?: string;
-    availableDiskBytes?: number;
-    missingPermissions: string[];
+    sourceDockerVersion?: string | null;
+    sourceComposeVersion?: string | null;
+    targetDockerVersion?: string | null;
+    targetComposeVersion?: string | null;
+    sourceAvailableDiskBytes?: number | null;
+    targetAvailableDiskBytes?: number | null;
   };
-}
-
-export interface MigrationServiceRuntimeState {
-  phase: string;
-  status: string;
-  health: 'unknown' | 'starting' | 'healthy' | 'unhealthy';
-  dataStatus: 'n/a' | 'pending' | 'synced' | 'restored' | 'failed' | 'skipped';
-  updatedAt: string;
-  note?: string;
+  requiresApprovals: {
+    externalBindMounts: boolean;
+  };
 }
 
 export interface MigrationTransferSummary {
@@ -354,7 +428,7 @@ export interface MigrationTransferSummary {
   checksumStatus: 'pending' | 'verifying' | 'passed' | 'failed' | 'n/a';
 }
 
-export interface RollbackSummary {
+export interface MigrationRollbackSummary {
   status: 'not_requested' | 'completed' | 'failed';
   actions: string[];
   message?: string;
@@ -364,23 +438,18 @@ export interface RollbackSummary {
 export interface MigrationSession {
   id: string;
   status:
-    | 'idle'
-    | 'planning'
     | 'plan_ready'
     | 'blocked'
     | 'running'
-    | 'cutover_pending'
     | 'verifying'
     | 'completed'
     | 'rolled_back'
     | 'failed';
   pageState:
-    | 'idle'
     | 'planning'
     | 'plan_ready'
     | 'blocked'
     | 'running'
-    | 'cutover_pending'
     | 'verifying'
     | 'completed'
     | 'rolled_back'
@@ -394,16 +463,18 @@ export interface MigrationSession {
   composePath: string;
   sourceEnvironmentId: string;
   targetEnvironmentId: string;
-  rootService: string;
-  dependencyServices: string[];
-  selectedServices: string[];
-  target: {
-    host: string;
-    port: number;
-    username: string;
-    workdir: string;
-  };
-  currentPhase: string;
+  currentPhase:
+    | 'discover'
+    | 'plan'
+    | 'preflight'
+    | 'stage_images'
+    | 'stage_project'
+    | 'stop_source'
+    | 'export_data'
+    | 'upload_restore'
+    | 'start_target'
+    | 'verify'
+    | 'rollback_if_needed';
   currentStep: string;
   progress: {
     percent: number;
@@ -413,7 +484,6 @@ export interface MigrationSession {
   riskCounts: Record<'low' | 'medium' | 'high', number>;
   blockingCount: number;
   plan: MigrationPlan;
-  services: Record<string, MigrationServiceRuntimeState>;
   transfer: MigrationTransferSummary;
   result: {
     outcome: 'pending' | 'blocked' | 'completed' | 'rolled_back' | 'failed';
@@ -425,7 +495,15 @@ export interface MigrationSession {
       status: 'pass' | 'warn' | 'fail';
       detail: string;
     }>;
-    rollback: RollbackSummary;
+    rollback: MigrationRollbackSummary;
+    checksumsVerified: boolean;
+    downtimeSeconds?: number | null;
+    sourceRestarted: boolean;
+    artifactsIndex: Record<string, string>;
+  };
+  approvals: {
+    externalBindMounts: string[];
+    downtimeConfirmed: boolean;
   };
 }
 
@@ -435,19 +513,16 @@ export interface MigrationEvent {
     | 'phase_started'
     | 'phase_finished'
     | 'phase_failed'
-    | 'service_status_changed'
     | 'transfer_progress'
     | 'command_log'
-    | 'session_summary'
     | 'result'
+    | 'session_summary'
     | 'heartbeat';
   ts: string;
-  phase?: string;
+  phase?: MigrationSession['currentPhase'];
   step?: string;
-  service?: string;
   level?: 'info' | 'warn' | 'error' | 'success';
   message?: string;
-  command?: string;
   current?: number;
   total?: number;
   percent?: number;
@@ -457,7 +532,76 @@ export interface MigrationEvent {
     currentFile?: string;
     etaSeconds?: number | null;
     speedBytesPerSec?: number | null;
-    serviceState?: MigrationServiceRuntimeState;
     [key: string]: unknown;
   };
+}
+
+export interface MigrationArtifactsResponse {
+  sessionId: string;
+  artifacts: Record<string, string>;
+  events: MigrationEvent[];
+}
+
+export type AppRouteGroupKey = 'infrastructure' | 'delivery' | 'network' | 'operations' | 'settings';
+
+export type AppRouteKey =
+  | 'infrastructure.overview'
+  | 'infrastructure.environments'
+  | 'delivery.workloads'
+  | 'delivery.deployments'
+  | 'network.dnsConnections'
+  | 'network.dnsRecords'
+  | 'network.gatewayRoutes'
+  | 'network.certificates'
+  | 'operations.migration'
+  | 'operations.jobs'
+  | 'settings.configuration'
+  | 'settings.preferences';
+
+export interface AppRouteMeta {
+  key: AppRouteKey;
+  groupKey: AppRouteGroupKey;
+  path: string;
+  title: string;
+  description: string;
+  menuVisible: boolean;
+}
+
+export interface NavGroupMeta {
+  key: AppRouteGroupKey;
+  label: string;
+  icon: ReactNode;
+  items: AppRouteMeta[];
+}
+
+export interface UserProfile {
+  username: string;
+}
+
+export type NotifyLevel = 'info' | 'success' | 'warning' | 'error';
+
+export interface FeedbackAction {
+  label: string;
+  handler?: () => void | Promise<void>;
+}
+
+export interface AppNotification {
+  id: string;
+  level: NotifyLevel;
+  message: string;
+  description?: string;
+  source?: string;
+  timestamp: string;
+  read: boolean;
+  action?: FeedbackAction;
+  requestId?: string;
+}
+
+export interface ApiErrorNormalized {
+  status: number;
+  code: string;
+  message: string;
+  details?: string;
+  requestId?: string;
+  retryable?: boolean;
 }

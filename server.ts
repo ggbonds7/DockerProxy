@@ -15,7 +15,6 @@ import { authMiddleware } from "./server/utils/auth";
 import authRoutes from "./server/routes/auth";
 import configRoutes from "./server/routes/config";
 import dockerRoutes from "./server/routes/docker";
-import dnsRoutes from "./server/routes/dns";
 import proxyRoutes from "./server/routes/proxy";
 import certsRoutes from "./server/routes/certs";
 import migrateRoutes from "./server/routes/migrate";
@@ -56,7 +55,6 @@ async function startServer() {
   app.use("/api/servers", serversRoutes);
   app.use("/api/docker", dockerRoutes);
   app.use("/api/workloads", workloadsRoutes);
-  app.use("/api/dns", dnsRoutes);
   app.use("/api/provider-connections", providerConnectionsRoutes);
   app.use("/api/gateways", gatewaysRoutes);
   app.use("/api/proxy", proxyRoutes);

@@ -1,8 +1,8 @@
-import crypto from "crypto";
+﻿import crypto from "crypto";
 import { getDb } from "../db";
 import { CONFIG } from "../utils/config";
 import { getEnvironment, getLocalEnvironmentId, listEnvironments } from "./platform";
-import { getRoutes } from "./nginx";
+import { getRoutes, syncGatewayRoutesFromNginx } from "./nginx";
 
 type GatewayRow = {
   id: string;
@@ -63,6 +63,7 @@ function buildGatewayResponse(row: GatewayRow) {
 export function initGatewaysData() {
   const db = getDb();
   const timestamp = nowIso();
+
   db.prepare(
     `INSERT INTO gateways (id, environment_id, display_name, kind, status, metadata_json, created_at, updated_at)
      VALUES (@id, @environmentId, @displayName, 'nginx', 'active', @metadataJson, @createdAt, @updatedAt)
@@ -79,6 +80,7 @@ export function initGatewaysData() {
     metadataJson: JSON.stringify({
       container: CONFIG.NGINX_CONTAINER_NAME,
       certAgentContainer: CONFIG.CERT_AGENT_CONTAINER_NAME,
+      runtimeMode: "docker",
     }),
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -101,6 +103,7 @@ export function initGatewaysData() {
       status: environment.capabilities.modules?.gateway ? "active" : "inactive",
       metadataJson: JSON.stringify({
         mode: "ssh-nginx",
+        runtimeMode: "auto",
         configDir: "/etc/nginx/conf.d",
         reloadCommand: "nginx -s reload",
         routeManagement: Boolean(environment.capabilities.modules?.gateway),
@@ -153,7 +156,7 @@ export function listServerGatewaySummaries() {
 export function getGateway(gatewayId: string) {
   const db = getDb();
   const row = db.prepare("SELECT * FROM gateways WHERE id = ?").get(gatewayId) as GatewayRow | undefined;
-  if (!row) throw new Error("网关不存在");
+  if (!row) throw new Error("网关不存在。");
   return buildGatewayResponse(row);
 }
 
@@ -172,4 +175,8 @@ export function getGatewayCertificates(gatewayId: string) {
       status: "valid" as const,
       routeTarget: route.target,
     }));
+}
+
+export async function syncGatewayRoutes(gatewayId: string) {
+  return syncGatewayRoutesFromNginx(gatewayId);
 }
